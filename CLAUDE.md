@@ -20,6 +20,16 @@ file dependencies with danger zone analysis.
 - Supported languages MVP: Python, JavaScript, TypeScript only
 - Skip: node_modules, dist, build, .git, binaries during indexing
 - Max repo size: 10,000 files, 500MB
+- Embeddings go behind an Embedder interface (app/services/embeddings.py)
+  with two implementations: local sentence-transformers (all-MiniLM-L6-v2,
+  384 dims) as the DEFAULT, and OpenAI as a swappable alternative. Code
+  must never call an embedding provider directly — only through the interface.
+- CPU-bound work (tree-sitter parsing, local embedding generation) must NOT
+  run in async endpoints. Use background tasks / threadpool to keep the
+  event loop and SSE stream responsive.
+- Indexing runs as a background job that writes progress to the IndexingJob
+  record. The SSE endpoint reads job state only — it does not perform the
+  work itself.
 
 ## What we are NOT building
 - Autonomous coding agents
@@ -74,3 +84,11 @@ frontend/
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+
+### 2026-05-26
+Phase 1 scaffold complete and verified. /backend: FastAPI app with
+GET /health (test passing), all app/ subpackages with __init__.py,
+requirements.txt (18 packages), pytest.ini, Dockerfile, .gitignore.
+/frontend: Next.js 14.2.35 with TypeScript strict, Tailwind, ESLint,
+App Router; custom dirs (components/, hooks/, lib/, types/, utils/).
+Root-level monorepo .gitignore added. Pushed to GitHub.
