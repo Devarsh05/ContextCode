@@ -65,7 +65,7 @@ frontend/
 └── utils/
 
 ## Current Status
-[ ] Phase 1 — Scaffold
+[x] Phase 1 — Scaffold
 [ ] Phase 2 — Ingestion pipeline
 [ ] Phase 3 — RAG chat
 [ ] Phase 4 — Dependency graph
