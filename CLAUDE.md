@@ -92,3 +92,7 @@ requirements.txt (18 packages), pytest.ini, Dockerfile, .gitignore.
 /frontend: Next.js 14.2.35 with TypeScript strict, Tailwind, ESLint,
 App Router; custom dirs (components/, hooks/, lib/, types/, utils/).
 Root-level monorepo .gitignore added. Pushed to GitHub.
+
+Phase 1 scaffold complete and verified — backend boots, /health returns
+200 OK, /docs works, all committed and pushed to GitHub. Next up: Phase 2
+ingestion pipeline.
