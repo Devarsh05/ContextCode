@@ -7,6 +7,7 @@ alembic
 chromadb
 langchain
 langchain-openai
+openai
 tree-sitter
 tree-sitter-python
 tree-sitter-javascript
