@@ -34,6 +34,23 @@ file dependencies with danger zone analysis.
   incompatibility with Windows. Production deployment on Railway runs Linux
   containers, where default prefork works.
 
+## Local Development — Startup
+Run these in order each session (Docker containers don't auto-start after reboot):
+
+1. **Docker Desktop** — ensure it is running before anything else
+2. **Postgres + Redis** — from repo root:
+   ```
+   docker compose up -d
+   ```
+3. **Celery worker** — from `/backend` (Windows requires `--pool=solo`):
+   ```
+   celery -A app.workers.celery_app worker --pool=solo --loglevel=info
+   ```
+4. **FastAPI server** — from `/backend`:
+   ```
+   uvicorn app.main:app --reload
+   ```
+
 ## What we are NOT building
 - Autonomous coding agents
 - Code generation or copilot features
