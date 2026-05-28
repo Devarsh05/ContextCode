@@ -33,6 +33,18 @@ file dependencies with danger zone analysis.
 - Celery worker on Windows local dev must use --pool=solo flag due to prefork
   incompatibility with Windows. Production deployment on Railway runs Linux
   containers, where default prefork works.
+- Chunking granularity: function-level and class-level chunks. Module-level
+  code (imports, top-level constants, module docstrings) becomes a single
+  chunk per file with chunk_type='module'.
+- ChromaDB: one collection per repo, named `repo_{repo_id}`. Re-indexing
+  drops and recreates the collection.
+- LLM generation goes behind an LLMClient interface (app/services/llm.py)
+  with OpenAI as the default implementation. Code must never call an LLM
+  provider directly — only through the interface.
+- POST /repos/index on an existing URL returns the existing repo by
+  default; pass `force_reindex=true` to drop chunks and re-run.
+- Parsing and embedding are CPU-bound — they run inside the Celery task,
+  never in an async endpoint.
 
 ## Local Development — Startup
 Run these in order each session (Docker containers don't auto-start after reboot):
