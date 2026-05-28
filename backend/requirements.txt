@@ -16,6 +16,7 @@ httpx
 gitpython
 pytest
 pytest-asyncio
+pytest-cov
 sentence-transformers
 networkx
 celery[redis]
