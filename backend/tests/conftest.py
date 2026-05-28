@@ -31,3 +31,31 @@ async def db_session(db_engine):
     )
     async with session_factory() as session:
         yield session
+
+
+@pytest.fixture
+async def async_client(db_session):
+    """
+    AsyncClient wired to the test database.
+
+    Overrides the get_db FastAPI dependency so all endpoints in the test
+    receive the same AsyncSession as db_session (which points to contextcode_test).
+    """
+    from httpx import AsyncClient, ASGITransport
+
+    from app.main import app
+    from app.models.database import get_db
+
+    async def _override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        timeout=10.0,
+    ) as client:
+        yield client
+
+    app.dependency_overrides.clear()
