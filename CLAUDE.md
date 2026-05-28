@@ -88,6 +88,14 @@ frontend/
 ## Session Log
 <!-- Update this after every session with what was completed -->
 
+### 2026-05-27
+Phase 2 Step 4 complete. Implemented IngestionService (URL validation,
+shallow clone, file walking with binary/skip-dir detection, size limits
+enforced: 10,000 files, 500MB) and the real index_repository Celery task
+using a sync DB session to write progress to IndexingJob. All unit tests
+passing, committed. Next: Step 5 — POST /repos/index and GET /repos/{id}/status
+SSE endpoints.
+
 ### 2026-05-26
 Phase 1 scaffold complete and verified. /backend: FastAPI app with
 GET /health (test passing), all app/ subpackages with __init__.py,
