@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 asyncpg
+aiosqlite
 alembic
 chromadb
 langchain
