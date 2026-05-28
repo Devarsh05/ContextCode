@@ -17,3 +17,4 @@ pytest-asyncio
 sentence-transformers
 networkx
 celery[redis]
+psycopg2-binary
