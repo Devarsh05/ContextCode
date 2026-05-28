@@ -30,6 +30,9 @@ file dependencies with danger zone analysis.
 - Indexing runs as a background job that writes progress to the IndexingJob
   record. The SSE endpoint reads job state only — it does not perform the
   work itself.
+- Celery worker on Windows local dev must use --pool=solo flag due to prefork
+  incompatibility with Windows. Production deployment on Railway runs Linux
+  containers, where default prefork works.
 
 ## What we are NOT building
 - Autonomous coding agents

@@ -15,6 +15,14 @@ docker compose up -d redis
 
 From `backend/`:
 
+**Windows:**
+```bash
+celery -A app.workers.celery_app worker --loglevel=info --pool=solo
+```
+
+> Windows does not support Celery's default `prefork` pool because it relies on `os.fork()`, which is unavailable on Windows. The `solo` pool runs tasks in the same process as the worker, which works fine for local development.
+
+**Linux / macOS / Docker (default prefork pool):**
 ```bash
 celery -A app.workers.celery_app worker --loglevel=info
 ```
