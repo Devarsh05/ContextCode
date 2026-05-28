@@ -16,3 +16,4 @@ pytest
 pytest-asyncio
 sentence-transformers
 networkx
+celery[redis]
