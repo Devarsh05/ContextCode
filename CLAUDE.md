@@ -96,7 +96,7 @@ frontend/
 
 ## Current Status
 [x] Phase 1 — Scaffold
-[ ] Phase 2 — Ingestion pipeline
+[x] Phase 2 — Ingestion pipeline
 [ ] Phase 3 — RAG chat
 [ ] Phase 4 — Dependency graph
 [ ] Phase 5 — Frontend
@@ -104,6 +104,19 @@ frontend/
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+
+### 2026-05-28
+Phase 2 — Ingestion pipeline complete. Full local dev stack established:
+docker-compose with Postgres + Redis, SQLAlchemy ORM models (Repository,
+IndexingJob) with async + sync sessions, Alembic async migrations. Celery
+worker wired to Redis with index_repository task (shallow clone, file
+walking with binary/skip-dir detection, size limits, progress writes to
+IndexingJob). POST /repos/index endpoint with Pydantic request/response
+models; duplicate-URL handled by returning existing repo. GET
+/repos/{id}/status SSE endpoint streams job progress from DB at 1s
+intervals. pytest suite: 29 tests passing against SQLite in-memory via
+aiosqlite — no running Postgres or Celery required. Next: Phase 3 — RAG
+chat (AST parsing, Embedder interface, ChromaDB storage, POST /chat).
 
 ### 2026-05-27
 Phase 2 Step 4 complete. Implemented IngestionService (URL validation,
