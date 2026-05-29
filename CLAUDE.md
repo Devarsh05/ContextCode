@@ -116,6 +116,23 @@ frontend/
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+### 2026-05-28 (Phase 3 Step 1)
+Embedder interface complete. app/services/embeddings.py with abstract
+Embedder base + LocalEmbedder (sentence-transformers all-MiniLM-L6-v2,
+384 dims, default) + OpenAIEmbedder (text-embedding-3-small, swappable
+via EMBEDDING_PROVIDER env var). Lazy model loading, batch support,
+sync interface for Celery worker. Factory get_embedder() reads
+EMBEDDING_PROVIDER env var. 9 new tests in tests/services/test_embeddings.py,
+all 49 tests green.
+
+Also fixed test infrastructure: pytest-asyncio 1.4.0 strict-mode break
+from dependency upgrade resolved by converting async fixtures in
+conftest.py to @pytest_asyncio.fixture and setting asyncio_mode=auto.
+Coverage artifacts (.coverage, htmlcov/) added to .gitignore. VS Code
+interpreter pinned to backend/.venv via .vscode/settings.json.
+
+Next: Step 2 — Tree-sitter AST parsers for Python/JS/TS at app/parsers/
+(Opus 4.7, plan mode, new session).
 
 ### 2026-05-28
 Phase 2 — Ingestion pipeline complete. Full local dev stack established:
