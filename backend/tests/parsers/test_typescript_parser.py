@@ -44,6 +44,38 @@ class TestTypeScriptParser:
                 f"{c.chunk_type} chunk content is not a verbatim slice of source"
             )
 
+    def test_module_chunk_does_not_overlap_function_or_class_chunks(self):
+        # import + interface at L1-3 (module), class at L5-7, const PI at L9 (module).
+        # Interfaces stay in the module chunk; the overlap invariant still holds.
+        source = (
+            "import { Req } from './t';\n"       # L1  module
+            "\n"
+            "interface User { id: number }\n"   # L3  module (no dedicated chunk)
+            "\n"
+            "class Box {\n"                      # L5  class
+            "  area(): number { return 1; }\n"  # L6
+            "}\n"                                # L7
+            "\n"
+            "const PI = 3.14;\n"               # L9  module (after class)
+        )
+        chunks = TypeScriptParser().parse("interleaved.ts", source)
+        module_lines: set[int] = set()
+        other_lines: set[int] = set()
+        for c in chunks:
+            line_range = range(c.start_line, c.end_line + 1)
+            if c.chunk_type == "module":
+                module_lines.update(line_range)
+            else:
+                other_lines.update(line_range)
+        overlap = module_lines & other_lines
+        assert not overlap, (
+            f"module chunk overlaps function/class on lines {sorted(overlap)}"
+        )
+        for c in chunks:
+            assert c.content in source, (
+                f"{c.chunk_type} chunk content is not a verbatim slice of source"
+            )
+
     def test_interface_and_type_alias_stay_in_module_chunk(self):
         source = (
             "interface User {\n"

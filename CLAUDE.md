@@ -33,9 +33,13 @@ file dependencies with danger zone analysis.
 - Celery worker on Windows local dev must use --pool=solo flag due to prefork
   incompatibility with Windows. Production deployment on Railway runs Linux
   containers, where default prefork works.
-- Chunking granularity: function-level and class-level chunks. Module-level
-  code (imports, top-level constants, module docstrings) becomes a single
-  chunk per file with chunk_type='module'.
+- Chunking granularity: function-level and class-level chunks. The
+  module chunk contains imports, top-level constants, module
+  docstrings, and any other top-level statements that are NOT inside
+  a function or class. Module chunks must not overlap function/class
+  chunk line ranges. Skip the module chunk entirely if the file has
+  no non-class/non-function top-level content. chunk_type values are
+  strictly 'function', 'class', or 'module' — no other values.
 - ChromaDB: one collection per repo, named `repo_{repo_id}`. Re-indexing
   drops and recreates the collection.
 - LLM generation goes behind an LLMClient interface (app/services/llm.py)

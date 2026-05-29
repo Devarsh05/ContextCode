@@ -67,6 +67,43 @@ class TestPythonParser:
                 f"{c.chunk_type} chunk content is not a verbatim slice of source"
             )
 
+    def test_module_chunk_does_not_overlap_function_or_class_chunks(self):
+        # Module nodes at L1, L6, L11 — interleaved with class (L3-4) and
+        # function (L8-9). The current first-to-last byte slice would span
+        # L1-11, eating through both. After the fix each contiguous run of
+        # module nodes becomes its own chunk.
+        source = (
+            "import os\n"       # L1  module
+            "\n"
+            "class Foo:\n"      # L3  class
+            "    x = 1\n"       # L4
+            "\n"
+            "X = 10\n"          # L6  module (after class)
+            "\n"
+            "def bar():\n"      # L8  function
+            "    return 1\n"    # L9
+            "\n"
+            "Y = 20\n"          # L11 module (after function)
+        )
+        chunks = PythonParser().parse("interleaved.py", source)
+        module_lines: set[int] = set()
+        other_lines: set[int] = set()
+        for c in chunks:
+            line_range = range(c.start_line, c.end_line + 1)
+            if c.chunk_type == "module":
+                module_lines.update(line_range)
+            else:
+                other_lines.update(line_range)
+        overlap = module_lines & other_lines
+        assert not overlap, (
+            f"module chunk overlaps function/class on lines {sorted(overlap)}"
+        )
+        # substring invariant must also hold for each interleaved chunk
+        for c in chunks:
+            assert c.content in source, (
+                f"{c.chunk_type} chunk content is not a verbatim slice of source"
+            )
+
     def test_decorated_function_includes_decorator(self):
         source = (
             "import functools\n"

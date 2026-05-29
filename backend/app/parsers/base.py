@@ -116,23 +116,34 @@ class TreeSitterParser(BaseParser):
                     file_path,
                 )
 
-            module_nodes = []
+            # Walk top-level nodes, flushing a module chunk for each contiguous
+            # run of non-function/class nodes before the next function/class.
+            # This prevents the module chunk's line range from spanning
+            # intervening function/class definitions when module-level statements
+            # are interleaved with them (e.g. a TypeVar assignment after a class).
+            pending_module: list = []
             for node in root.named_children:
                 chunk_type, function_name = self._classify(node)
                 if chunk_type is not None:
+                    # Flush any pending module-level nodes before this chunk.
+                    mc = self._build_module_chunk(
+                        file_path, pending_module, source_bytes
+                    )
+                    if mc is not None:
+                        chunks.append(mc)
+                    pending_module = []
                     # Use the original node so wrappers (decorators/exports)
                     # are included in the chunk text.
                     chunks.append(
                         self._make_chunk(file_path, node, chunk_type, function_name)
                     )
                 else:
-                    module_nodes.append(node)
+                    pending_module.append(node)
 
-            module_chunk = self._build_module_chunk(
-                file_path, module_nodes, source_bytes
-            )
-            if module_chunk is not None:
-                chunks.append(module_chunk)
+            # Flush any trailing module-level nodes.
+            mc = self._build_module_chunk(file_path, pending_module, source_bytes)
+            if mc is not None:
+                chunks.append(mc)
         except Exception:  # defensive: a parser bug must not crash indexing
             logger.warning(
                 "Failed to parse %s; returning %d partial chunk(s)",
