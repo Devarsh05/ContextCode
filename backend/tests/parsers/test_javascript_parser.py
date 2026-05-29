@@ -39,6 +39,27 @@ class TestJavaScriptParser:
         assert "const PI = 3.14;" in module.content
         assert "function add" not in module.content
 
+    def test_chunk_content_is_substring_of_source(self):
+        source = (
+            "import { x } from './x';\n"
+            "\n"
+            "const PI = 3.14;\n"
+            "\n"
+            "function add(a, b) {\n"
+            "  return a + b;\n"
+            "}\n"
+            "\n"
+            "class Box {\n"
+            "  area() { return 1; }\n"
+            "}\n"
+        )
+        chunks = JavaScriptParser().parse("test.js", source)
+        assert chunks
+        for c in chunks:
+            assert c.content in source, (
+                f"{c.chunk_type} chunk content is not a verbatim slice of source"
+            )
+
     def test_export_const_arrow(self):
         source = "export const handler = (req, res) => {\n  res.end();\n};\n"
         chunks = JavaScriptParser().parse("h.js", source)

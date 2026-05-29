@@ -23,6 +23,27 @@ class TestTypeScriptParser:
         assert classes == ["Box"]
         assert all(c.language == "typescript" for c in chunks)
 
+    def test_chunk_content_is_substring_of_source(self):
+        source = (
+            "import { Req } from './types';\n"
+            "\n"
+            "type Id = string | number;\n"
+            "\n"
+            "function add(a: number, b: number): number {\n"
+            "  return a + b;\n"
+            "}\n"
+            "\n"
+            "class Box {\n"
+            "  area(): number { return 1; }\n"
+            "}\n"
+        )
+        chunks = TypeScriptParser().parse("test.ts", source)
+        assert chunks
+        for c in chunks:
+            assert c.content in source, (
+                f"{c.chunk_type} chunk content is not a verbatim slice of source"
+            )
+
     def test_interface_and_type_alias_stay_in_module_chunk(self):
         source = (
             "interface User {\n"

@@ -46,6 +46,27 @@ class TestPythonParser:
         assert fn.start_line == 1
         assert fn.end_line == 2
 
+    def test_chunk_content_is_substring_of_source(self):
+        source = (
+            "import os\n"
+            "from sys import argv\n"
+            "\n"
+            "TIMEOUT = 30\n"
+            "\n"
+            "def greet(name):\n"
+            "    return f'hi {name}'\n"
+            "\n"
+            "class Widget:\n"
+            "    def render(self):\n"
+            "        return 1\n"
+        )
+        chunks = PythonParser().parse("test.py", source)
+        assert chunks
+        for c in chunks:
+            assert c.content in source, (
+                f"{c.chunk_type} chunk content is not a verbatim slice of source"
+            )
+
     def test_decorated_function_includes_decorator(self):
         source = (
             "import functools\n"

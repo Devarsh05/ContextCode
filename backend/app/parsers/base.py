@@ -107,7 +107,8 @@ class TreeSitterParser(BaseParser):
         chunks: list[ParsedChunk] = []
         try:
             parser = self._get_parser(file_path)
-            tree = parser.parse(content.encode("utf8"))
+            source_bytes = content.encode("utf8")
+            tree = parser.parse(source_bytes)
             root = tree.root_node
             if root.has_error:
                 logger.warning(
@@ -127,7 +128,9 @@ class TreeSitterParser(BaseParser):
                 else:
                     module_nodes.append(node)
 
-            module_chunk = self._build_module_chunk(file_path, module_nodes)
+            module_chunk = self._build_module_chunk(
+                file_path, module_nodes, source_bytes
+            )
             if module_chunk is not None:
                 chunks.append(module_chunk)
         except Exception:  # defensive: a parser bug must not crash indexing
@@ -150,10 +153,16 @@ class TreeSitterParser(BaseParser):
             language=self.language,
         )
 
-    def _build_module_chunk(self, file_path, nodes) -> ParsedChunk | None:
+    def _build_module_chunk(
+        self, file_path, nodes, source_bytes
+    ) -> ParsedChunk | None:
         if not nodes:
             return None  # empty / no top-level statements → no module chunk
-        content = "\n".join(n.text.decode("utf8") for n in nodes)
+        # Verbatim contiguous slice of the original source between the first and
+        # last module-level node, so the content is always a substring of the
+        # source (preserves blank lines / comments). When module nodes are
+        # non-contiguous, this slice also includes the intervening text.
+        content = source_bytes[nodes[0].start_byte : nodes[-1].end_byte].decode("utf8")
         return ParsedChunk(
             file_path=file_path,
             chunk_type="module",
