@@ -116,6 +116,31 @@ frontend/
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+### 2026-05-28 (Phase 3 Step 2)
+Tree-sitter AST parsers complete at app/parsers/. base.py defines the
+ParsedChunk frozen dataclass (CodeChunk fields minus id/repo_id, 1-indexed
+lines), the BaseParser ABC, and a shared TreeSitterParser that lazily builds
+the Language/Parser per grammar and walks the root's named children,
+classifying each into function/class/module chunks. PythonParser
+(function_definition, class_definition, decorated_definition unwrap),
+JavaScriptParser (function_declaration, class_declaration, arrow/function
+assigned to a single const/let via lexical_declaration, export_statement
+unwrap), TypeScriptParser (subclasses JS; picks tsx vs typescript grammar by
+file extension; interfaces/type aliases get no dedicated chunk and instead
+fall into the module chunk so they stay RAG-searchable). registry.py maps
+extensions→language (.py/.js/.jsx/.ts/.tsx) and caches parser instances;
+returns None for unsupported. Parsing is error-tolerant: parse() never raises,
+logs a warning on syntax errors, and returns best-effort chunks. Module chunk
+= top-level nodes that aren't a function/class, joined by newline; empty/blank
+files yield zero chunks (no empty module chunk). 29 new tests in
+tests/parsers/ (python, javascript, typescript, registry, edge cases incl.
+syntax-error files); full suite 78 green. Added tree-sitter-typescript to
+requirements.txt (was missing). Note: the CodeChunk SQLAlchemy ORM model still
+does not exist — parsers emit plain ParsedChunk; the caller maps it later.
+Next: Step 3 — ChromaDB storage (one collection per repo `repo_{repo_id}`),
+the CodeChunk ORM model, and wiring parse→embed→store into the
+index_repository Celery task.
+
 ### 2026-05-28 (Phase 3 Step 1)
 Embedder interface complete. app/services/embeddings.py with abstract
 Embedder base + LocalEmbedder (sentence-transformers all-MiniLM-L6-v2,
