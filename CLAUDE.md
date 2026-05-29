@@ -120,6 +120,59 @@ frontend/
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+### 2026-05-29 (Phase 3 Step 2)
+Tree-sitter AST parsers complete and hardened at app/parsers/. The
+layer turns raw source files into ParsedChunk objects (a frozen dataclass
+with file_path, chunk_type, function_name, start_line, end_line, content,
+language) for downstream embedding and RAG retrieval.
+
+base.py defines the BaseParser ABC and the shared TreeSitterParser, which
+lazily builds a tree-sitter Language/Parser per grammar and walks the
+root's named children. Three concrete parsers ship: PythonParser handles
+function_definition, class_definition, and decorated_definition (decorator
+lines included in the chunk). JavaScriptParser handles function_declaration,
+class_declaration, arrow/function assigned to a single const/let
+(lexical_declaration unwrap), and export_statement wrapping. TypeScriptParser
+subclasses JS and selects the tsx vs typescript grammar by file extension;
+interface_declaration and type_alias_declaration get no dedicated chunk and
+fall through to the module chunk so type definitions stay RAG-searchable.
+registry.py maps extensions to languages (.py, .js/.jsx, .ts/.tsx) and
+caches parser instances; both functions return None for unsupported types.
+
+Chunk types are strictly function, class, and module. Function chunks cover
+one top-level function each (including arrow functions assigned to const in
+JS/TS); class chunks cover the whole class body with methods kept inside;
+the module chunk per contiguous run of top-level statements collects imports,
+constants, module docstrings, and anything else not inside a function or
+class. Empty and whitespace-only files produce zero chunks. Parsing is
+error-tolerant: parse() never raises, logs a warning on syntax errors, and
+returns the best-effort partial chunks tree-sitter was able to extract.
+
+Two bugs were caught and fixed during the session through test-driven
+debugging. First, module chunk content was being assembled by joining
+top-level node texts with "\n" instead of slicing the original source bytes
+by byte range; this dropped blank lines between statements, breaking the
+substring invariant. The root cause was in the shared base.py helper and
+affected all three parsers identically, so it was fixed there. Second,
+module chunks were taking a first-to-last byte slice across the entire
+file's module-level nodes at once; when module nodes were non-contiguous
+(e.g. imports at the top and a TypeVar assignment after several class
+definitions), the slice spanned the intervening class bodies, causing the
+module chunk's line range to overlap with class and function chunks. Fixed
+by switching parse() to a streaming-flush approach: each contiguous run of
+module-level nodes is flushed as its own chunk when a function/class node
+is encountered, so module chunks fill only the gaps between function/class
+definitions.
+
+Two property invariants are now enforced by tests across all three parsers:
+the substring invariant (chunk.content is always a verbatim byte-range slice
+of the original source) and the no-overlap invariant (module chunk line
+ranges never intersect function/class chunk line ranges). Full suite: 84
+tests green.
+
+Next: Step 3 — ChromaDB storage layer at app/services/vector_store.py
+(Sonnet 4.6, auto mode).
+
 ### 2026-05-28 (Phase 3 Step 2)
 Tree-sitter AST parsers complete at app/parsers/. base.py defines the
 ParsedChunk frozen dataclass (CodeChunk fields minus id/repo_id, 1-indexed
