@@ -12,6 +12,9 @@ file dependencies with danger zone analysis.
 
 ## Rules — follow these every session, no exceptions
 - Never push to main directly
+- Git commits must not include "Co-Authored-By: Claude" trailers, 
+  "Generated with Claude Code" footers, or any AI attribution. Use
+  plain commit messages with only the technical description.
 - Always write tests alongside new services
 - Backend lives in /backend, frontend in /frontend
 - Use async/await throughout FastAPI
@@ -114,12 +117,46 @@ frontend/
 [x] Phase 1 — Scaffold
 [x] Phase 2 — Ingestion pipeline
 [ ] Phase 3 — RAG chat
+    [x] Step 1 — Embedder interface
+    [x] Step 2 — Tree-sitter parsers
+    [x] Step 3 — ChromaDB storage
+    [ ] Step 4 — Wire parsing+embedding into Celery
+    [ ] Step 5 — RAG pipeline + LLM client
+    [ ] Step 6 — POST /chat endpoint
 [ ] Phase 4 — Dependency graph
 [ ] Phase 5 — Frontend
 [ ] Phase 6 — Deploy
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+### 2026-05-29 (Phase 3 Step 3)
+ChromaDB storage layer complete at app/services/vector_store.py. The
+VectorStore class wraps a chromadb.PersistentClient and exposes five
+synchronous methods for the Celery worker: get_or_create_collection(repo_id)
+returns the named Chroma collection (repo_{repo_id}); add_chunks(repo_id,
+chunks, embeddings) stores chunk.id as the Chroma document id, chunk.content
+as the document text, and file_path, chunk_type, function_name, start_line,
+end_line, and language as metadata (function_name is coerced to "" when None
+since ChromaDB metadata values cannot be None); query(repo_id, embedding,
+top_k=5) returns a ranked list of dicts with chunk_id, content, metadata, and
+distance, guarding against the n_results > count error by clamping to the
+collection size and returning [] on an empty collection; drop_collection(repo_id)
+deletes the collection and swallows the exception if it doesn't exist;
+chunk_count(repo_id) returns the integer count. The module-level
+get_vector_store() factory provides the process-wide singleton client for
+production callers. Persistence path is ./chroma_data, added to .gitignore.
+
+Beyond the 14-test unit suite, three end-to-end behaviors were verified
+manually after a process restart: persistence held across restarts (chunks
+added in one process were found in a fresh one pointing at the same
+chroma_data directory); a real semantic query ("how does authentication work")
+ranked def login above unrelated chunks (def render_button, class
+DatabasePool); and repo_id isolation held — querying repo 1 returned no
+documents from repo 2's collection. Full suite: 98 tests green.
+
+Next: Step 4 — wire parsing + embedding + storage into the existing Celery
+index_repository task (Sonnet 4.6, plan mode).
+
 ### 2026-05-29 (Phase 3 Step 2)
 Tree-sitter AST parsers complete and hardened at app/parsers/. The
 layer turns raw source files into ParsedChunk objects (a frozen dataclass
