@@ -1,3 +1,4 @@
+from app.models.code_chunk import CodeChunk
 from app.models.database import (
     AsyncSessionLocal,
     Base,
@@ -16,6 +17,7 @@ __all__ = [
     "SyncSessionLocal",
     "sync_engine",
     "get_db",
+    "CodeChunk",
     "Repository",
     "IndexingJob",
 ]
