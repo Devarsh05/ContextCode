@@ -121,7 +121,7 @@ frontend/
     [x] Step 2 — Tree-sitter parsers
     [x] Step 3 — ChromaDB storage
     [x] Step 4 — Wire parsing+embedding into Celery
-    [ ] Step 5 — RAG pipeline + LLM client
+    [x] Step 5 — RAG pipeline + LLM client
     [ ] Step 6 — POST /chat endpoint
 [ ] Phase 4 — Dependency graph
 [ ] Phase 5 — Frontend
@@ -129,6 +129,43 @@ frontend/
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+### 2026-05-30 (Phase 3 Step 5)
+Phase 3 Step 5 complete. RAG pipeline and LLM client interface built
+and verified end-to-end against a real indexed repo.
+
+app/services/llm.py: LLMClient ABC with async generate(system, user,
+max_tokens) -> str. OpenAIClient implementation using AsyncOpenAI with
+JSON mode (response_format={"type": "json_object"}), lazy client init,
+model configurable via LLM_MODEL env var (default gpt-4o-mini).
+get_llm_client() factory driven by LLM_PROVIDER env var. Mirrors the
+Embedder interface pattern exactly.
+
+app/rag/pipeline.py: RAGPipeline.answer(repo_id, question) async method
+running embed -> retrieve -> build context -> LLM -> parse. Sync
+embed_query and vector_store.query wrapped in run_in_executor to protect
+the event loop; LLM call awaited directly as I/O-bound. Citation
+dataclass with file_path, function_name, start_line, end_line,
+chunk_type, snippet. _build_context formats numbered context blocks
+labeled with file_path:start_line-end_line. _parse_response uses
+json.loads only — no regex; out-of-range chunk indices silently dropped;
+malformed JSON raises ValueError. Empty retrieval returns graceful
+message with citations=[]. System prompt explicitly instructs the model
+to use only provided context and say so if insufficient.
+
+Manual verification against https://github.com/encode/databases
+(169 chunks, 50 files): 5 questions asked — connection pool, query
+execution, transaction handling, URL parsing, and an off-topic sourdough
+question. All 4 code questions returned grounded answers with inline
+citations mapping to real classes and line ranges. Off-topic question
+returned clean refusal with 0 citations and no hallucination.
+
+Note: file_path values in citations are currently absolute temp clone
+paths (e.g. C:\Users\...\AppData\Local\Temp\tmpXXX\repo\file.py).
+This will be cleaned up to relative paths in Step 6 at the endpoint
+layer.
+
+Full suite: 123 tests green.
+
 ### 2026-05-29 (Phase 3 Step 4)
 Phase 3 Step 4 complete. The full parse → embed → store pipeline is now
 wired into the Celery index_repository task and verified end-to-end.
