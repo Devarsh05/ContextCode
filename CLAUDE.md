@@ -116,7 +116,7 @@ frontend/
 ## Current Status
 [x] Phase 1 — Scaffold
 [x] Phase 2 — Ingestion pipeline
-[ ] Phase 3 — RAG chat
+[x] Phase 3 — RAG chat
     [x] Step 1 — Embedder interface
     [x] Step 2 — Tree-sitter parsers
     [x] Step 3 — ChromaDB storage
@@ -129,33 +129,31 @@ frontend/
 
 ## Session Log
 ### 2026-05-30 (Phase 3 Step 6)
-Phase 3 Step 6 complete. POST /chat endpoint wired and tested.
+Phase 3 Step 6 complete. POST /chat endpoint wiring RAGPipeline into
+FastAPI, verified end-to-end with real queries.
 
-app/api/schemas.py: added CitationResponse (file_path, function_name,
-start_line, end_line, chunk_type, snippet), ChatRequest (repo_id: str,
-question: str with @field_validator rejecting empty/whitespace), and
-ChatResponse (answer, citations). Uses Pydantic v2 @field_validator.
+app/api/chat.py: POST /chat with module-level RAGPipeline singleton
+(avoids reloading the embedding model per request). Validates repo
+exists (404) and status is "completed" (400). Converts Citation
+dataclasses to CitationResponse Pydantic models. _make_relative_path
+normalizes absolute temp clone paths to repo-relative paths using a
+regex (_TMP_SEGMENT_RE = re.compile(r"/tmp[a-z0-9_]+/")) that strips
+everything up to and including the mkdtemp segment, then conditionally
+prepends {repo_name}/ if the remaining path doesn't already start with
+it — handles both package files (databases/backends/mysql.py) and
+files elsewhere in the repo (databases/tests/test_databases.py).
 
-app/api/chat.py: POST /chat endpoint. Module-level _pipeline =
-RAGPipeline() singleton to avoid reloading the embedding model per
-request. Validates repo_id as UUID (404 if invalid/missing), checks
-repo.status == "completed" (400 if not). Calls await
-_pipeline.answer(repo_id, question), converts Citation dataclasses to
-CitationResponse Pydantic models. File path cleanup via
-_make_relative_path(absolute_path, repo_name): normalizes separators to
-forward slashes, finds /{repo_name}/ segment, returns
-{repo_name}/{rest}; falls back to normalized path if repo name not
-found in path (e.g. README.md at repo root).
+app/api/schemas.py: added CitationResponse, ChatRequest (with
+@field_validator rejecting empty/whitespace questions), ChatResponse.
 
-app/main.py: registered chat_router (from app.api.chat).
+app/main.py: registered chat_router.
 
-tests/api/test_chat.py: 5 tests — 200 with answer+citations (mocks
-RAGPipeline.answer at class level), 404 for unknown repo_id, 400 for
-non-completed status, 422 for empty question, 422 for whitespace
-question. File path cleanup verified: Citation with absolute path
-/tmp/tmpABC/databases/backends/mysql.py → databases/backends/mysql.py.
+End-to-end verification against https://github.com/encode/databases:
+404 on unknown repo_id, 422 on empty question, 400 on unindexed repo,
+grounded answer with inline citations and clean relative file paths on
+real question, graceful refusal with citations=[] on off-topic question.
 
-Full suite: 128 tests green.
+Full suite: 132 tests green.
 
 ### 2026-05-30 (Phase 3 Step 5)
 Phase 3 Step 5 complete. RAG pipeline and LLM client interface built
