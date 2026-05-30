@@ -44,7 +44,7 @@ class FileDependency(Base):
         nullable=False,
     )
     source_file: Mapped[str] = mapped_column(String, nullable=False)
-    target_file: Mapped[str] = mapped_column(String, nullable=False)
+    target_file: Mapped[str | None] = mapped_column(String, nullable=True)
     import_raw: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
