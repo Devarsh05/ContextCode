@@ -120,7 +120,7 @@ frontend/
     [x] Step 1 — Embedder interface
     [x] Step 2 — Tree-sitter parsers
     [x] Step 3 — ChromaDB storage
-    [ ] Step 4 — Wire parsing+embedding into Celery
+    [x] Step 4 — Wire parsing+embedding into Celery
     [ ] Step 5 — RAG pipeline + LLM client
     [ ] Step 6 — POST /chat endpoint
 [ ] Phase 4 — Dependency graph
@@ -129,6 +129,32 @@ frontend/
 
 ## Session Log
 <!-- Update this after every session with what was completed -->
+### 2026-05-29 (Phase 3 Step 4)
+Phase 3 Step 4 complete. The full parse → embed → store pipeline is now
+wired into the Celery index_repository task and verified end-to-end.
+
+Two bugs were found and fixed in the API layer. First, the IndexRequest
+Pydantic schema was missing the force_reindex field; added
+force_reindex: bool = False. Second, the POST /repos/index handler was
+ignoring force_reindex entirely — when a repo already existed with
+status "completed", it returned that stale status immediately without
+re-queuing the task. Fixed by adding explicit branching: when
+force_reindex=True, the handler now deletes all existing CodeChunk rows
+for the repo, drops the Chroma collection via
+get_vector_store().drop_collection(), creates a new IndexingJob with
+status="pending", queues the Celery task, and returns status="queued".
+When force_reindex=False and the repo exists, it returns the existing
+job state unchanged.
+
+End-to-end verification against https://github.com/encode/databases:
+POST /repos/index with force_reindex=true returned status "queued"
+immediately; Celery worker received the task, cloned the repo, loaded
+the all-MiniLM-L6-v2 embedding model, parsed and embedded all files;
+SSE stream progressed from running→persisting→storing→completed with
+progress_pct climbing 50→90→100; pipeline completed in 90 seconds;
+169 chunks across 50 files stored in both Postgres code_chunks table
+and ChromaDB collection repo_{repo_id}. Full test suite green.
+
 ### 2026-05-29 (Phase 3 Step 3)
 ChromaDB storage layer complete at app/services/vector_store.py. The
 VectorStore class wraps a chromadb.PersistentClient and exposes five

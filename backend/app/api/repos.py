@@ -3,15 +3,17 @@ import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.api.schemas import IndexRequest, IndexResponse
+from app.models.code_chunk import CodeChunk
 from app.models.database import get_db
 from app.models.indexing_job import IndexingJob
 from app.models.repository import Repository
 from app.services.ingestion import IngestionService
+from app.services.vector_store import get_vector_store
 from app.workers.tasks import index_repository
 
 router = APIRouter(prefix="/repos", tags=["repos"])
@@ -34,15 +36,25 @@ async def start_indexing(
     )
     repo = result.scalar_one_or_none()
 
-    if repo is not None and repo.status == "completed":
-        job_result = await db.execute(
-            select(IndexingJob)
-            .where(IndexingJob.repo_id == repo.id)
-            .order_by(IndexingJob.created_at.desc())
-            .limit(1)
-        )
-        job = job_result.scalar_one()
-        return IndexResponse(repo_id=repo.id, job_id=job.id, status="completed")
+    if repo is not None:
+        if body.force_reindex:
+            await db.execute(delete(CodeChunk).where(CodeChunk.repo_id == repo.id))
+            get_vector_store().drop_collection(str(repo.id))
+            job = IndexingJob(repo_id=repo.id)
+            db.add(job)
+            await db.flush()
+            await db.commit()
+            index_repository.delay(body.repo_url, str(job.id), str(repo.id))
+            return IndexResponse(repo_id=repo.id, job_id=job.id, status="queued")
+        else:
+            job_result = await db.execute(
+                select(IndexingJob)
+                .where(IndexingJob.repo_id == repo.id)
+                .order_by(IndexingJob.created_at.desc())
+                .limit(1)
+            )
+            job = job_result.scalar_one()
+            return IndexResponse(repo_id=repo.id, job_id=job.id, status=job.status)
 
     if repo is None:
         repo = Repository(url=body.repo_url, name=name)

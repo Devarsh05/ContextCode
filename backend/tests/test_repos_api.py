@@ -76,6 +76,67 @@ async def test_index_repo_existing_completed_returns_existing(async_client, db_s
     assert data["status"] == "completed"
 
 
+async def test_force_reindex_queues_new_job(async_client, db_session):
+    repo = Repository(
+        url="https://github.com/owner/force-test",
+        name="force-test",
+        status="completed",
+    )
+    db_session.add(repo)
+    await db_session.flush()
+
+    old_job = IndexingJob(repo_id=repo.id, status="completed", progress_pct=100)
+    db_session.add(old_job)
+    await db_session.commit()
+
+    with patch("app.api.repos.index_repository") as mock_task, \
+         patch("app.api.repos.get_vector_store") as mock_vs:
+        mock_task.delay.return_value = None
+        mock_vs.return_value.drop_collection.return_value = None
+
+        response = await async_client.post(
+            "/repos/index",
+            json={"repo_url": "https://github.com/owner/force-test", "force_reindex": True},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["repo_id"] == str(repo.id)
+    assert data["job_id"] != str(old_job.id)
+    assert data["status"] == "queued"
+    mock_task.delay.assert_called_once()
+    mock_vs.return_value.drop_collection.assert_called_once_with(str(repo.id))
+
+
+async def test_no_force_reindex_returns_completed_without_queuing(async_client, db_session):
+    repo = Repository(
+        url="https://github.com/owner/no-force-test",
+        name="no-force-test",
+        status="completed",
+    )
+    db_session.add(repo)
+    await db_session.flush()
+
+    job = IndexingJob(repo_id=repo.id, status="completed", progress_pct=100)
+    db_session.add(job)
+    await db_session.commit()
+
+    with patch("app.api.repos.index_repository") as mock_task:
+        mock_task.delay.return_value = None
+
+        response = await async_client.post(
+            "/repos/index",
+            json={"repo_url": "https://github.com/owner/no-force-test", "force_reindex": False},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["repo_id"] == str(repo.id)
+    assert data["job_id"] == str(job.id)
+    assert data["status"] == "completed"
+    mock_task.delay.assert_not_called()
+
+
 # ── GET /repos/{repo_id}/status (SSE) ────────────────────────────────────────
 
 async def test_status_sse_unknown_repo_returns_404(async_client):
