@@ -7,6 +7,7 @@ from app.models.database import (
     get_db,
     sync_engine,
 )
+from app.models.graph import FileDependency, FileNode
 from app.models.indexing_job import IndexingJob
 from app.models.repository import Repository
 
@@ -18,6 +19,8 @@ __all__ = [
     "sync_engine",
     "get_db",
     "CodeChunk",
+    "FileDependency",
+    "FileNode",
     "Repository",
     "IndexingJob",
 ]

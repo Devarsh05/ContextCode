@@ -23,6 +23,7 @@ if config.config_file_name is not None:
 
 # Import every model so autogenerate can detect all tables.
 from app.models.database import Base  # noqa: E402
+from app.models.graph import FileDependency, FileNode  # noqa: E402, F401
 from app.models.indexing_job import IndexingJob  # noqa: E402, F401
 from app.models.repository import Repository  # noqa: E402, F401
 

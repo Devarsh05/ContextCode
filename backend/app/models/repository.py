@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.database import Base
 
 if TYPE_CHECKING:
+    from app.models.graph import FileDependency, FileNode
     from app.models.indexing_job import IndexingJob
 
 
@@ -35,5 +36,13 @@ class Repository(Base):
     indexing_jobs: Mapped[List["IndexingJob"]] = relationship(
         "IndexingJob",
         back_populates="repository",
+        cascade="all, delete-orphan",
+    )
+    file_nodes: Mapped[List["FileNode"]] = relationship(
+        "FileNode",
+        cascade="all, delete-orphan",
+    )
+    file_dependencies: Mapped[List["FileDependency"]] = relationship(
+        "FileDependency",
         cascade="all, delete-orphan",
     )
