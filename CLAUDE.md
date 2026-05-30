@@ -124,10 +124,50 @@ frontend/
     [x] Step 5 — RAG pipeline + LLM client
     [x] Step 6 — POST /chat endpoint
 [ ] Phase 4 — Dependency graph
+    [x] Step 1 — Graph data models & migration
+    [ ] Step 2 — Import extractors
+    [ ] Step 3 — Graph builder service
+    [ ] Step 4 — Wire into Celery
+    [ ] Step 5 — GET /repos/{id}/graph endpoint
 [ ] Phase 5 — Frontend
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-30 (Phase 4 Step 1)
+Phase 4 Step 1 complete. Dependency graph data models and Alembic
+migration added.
+
+app/models/graph.py: Two new SQLAlchemy ORM models. FileNode with fields
+id (UUID PK), repo_id (UUID FK → repositories.id, NOT NULL, CASCADE
+DELETE), file_path (str, NOT NULL), language (str, NOT NULL),
+import_count (int, default 0), imported_by_count (int, default 0),
+created_at (datetime, server_default now). Unique constraint on
+(repo_id, file_path). FileDependency with fields id (UUID PK), repo_id
+(UUID FK → repositories.id, NOT NULL, CASCADE DELETE), source_file
+(str, NOT NULL), target_file (str, NULLABLE — None when import cannot
+be resolved to a repo file e.g. third-party packages), import_raw
+(str, NOT NULL), created_at (datetime, server_default now). Index on
+(repo_id, source_file).
+
+app/models/__init__.py: Both FileNode and FileDependency registered.
+
+alembic/versions/a8e3f1c92d74_add_file_nodes_and_file_dependencies_tables.py:
+Migration adds both tables with constraints and index. Verified
+upgrade and downgrade both apply cleanly against Postgres.
+
+tests/models/test_graph_models.py: 4 tests — FileNode creation and
+query, FileDependency creation and query, cascade delete removes both
+FileNode and FileDependency rows when parent Repository is deleted,
+unique constraint on (repo_id, file_path) raises IntegrityError on
+duplicate insert.
+
+One bug caught during verification: target_file was initially created
+NOT NULL. Fixed to NULLABLE before committing — required for Step 3
+where unresolved imports (third-party packages like react, lodash)
+store None as target_file.
+
+Full suite: 136 tests green.
+
 ### 2026-05-30 (Phase 3 Step 6)
 Phase 3 Step 6 complete. POST /chat endpoint wiring RAGPipeline into
 FastAPI, verified end-to-end with real queries.
