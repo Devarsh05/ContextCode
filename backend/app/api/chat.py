@@ -1,3 +1,4 @@
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,13 +14,19 @@ router = APIRouter(tags=["chat"])
 
 _pipeline = RAGPipeline()
 
+# Matches Python's tempfile.mkdtemp() directory names: tmp followed by
+# lowercase letters, digits, and underscores.
+_TMP_SEGMENT_RE = re.compile(r"/tmp[a-z0-9_]+/")
+
 
 def _make_relative_path(absolute_path: str, repo_name: str) -> str:
     normalized = absolute_path.replace("\\", "/")
-    marker = f"/{repo_name}/"
-    idx = normalized.find(marker)
-    if idx != -1:
-        return repo_name + "/" + normalized[idx + len(marker):]
+    match = _TMP_SEGMENT_RE.search(normalized)
+    if match:
+        relative = normalized[match.end():]
+        if not relative.startswith(repo_name + "/"):
+            relative = repo_name + "/" + relative
+        return relative
     return normalized
 
 
