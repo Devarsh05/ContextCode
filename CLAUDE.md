@@ -122,13 +122,41 @@ frontend/
     [x] Step 3 — ChromaDB storage
     [x] Step 4 — Wire parsing+embedding into Celery
     [x] Step 5 — RAG pipeline + LLM client
-    [ ] Step 6 — POST /chat endpoint
+    [x] Step 6 — POST /chat endpoint
 [ ] Phase 4 — Dependency graph
 [ ] Phase 5 — Frontend
 [ ] Phase 6 — Deploy
 
 ## Session Log
-<!-- Update this after every session with what was completed -->
+### 2026-05-30 (Phase 3 Step 6)
+Phase 3 Step 6 complete. POST /chat endpoint wired and tested.
+
+app/api/schemas.py: added CitationResponse (file_path, function_name,
+start_line, end_line, chunk_type, snippet), ChatRequest (repo_id: str,
+question: str with @field_validator rejecting empty/whitespace), and
+ChatResponse (answer, citations). Uses Pydantic v2 @field_validator.
+
+app/api/chat.py: POST /chat endpoint. Module-level _pipeline =
+RAGPipeline() singleton to avoid reloading the embedding model per
+request. Validates repo_id as UUID (404 if invalid/missing), checks
+repo.status == "completed" (400 if not). Calls await
+_pipeline.answer(repo_id, question), converts Citation dataclasses to
+CitationResponse Pydantic models. File path cleanup via
+_make_relative_path(absolute_path, repo_name): normalizes separators to
+forward slashes, finds /{repo_name}/ segment, returns
+{repo_name}/{rest}; falls back to normalized path if repo name not
+found in path (e.g. README.md at repo root).
+
+app/main.py: registered chat_router (from app.api.chat).
+
+tests/api/test_chat.py: 5 tests — 200 with answer+citations (mocks
+RAGPipeline.answer at class level), 404 for unknown repo_id, 400 for
+non-completed status, 422 for empty question, 422 for whitespace
+question. File path cleanup verified: Citation with absolute path
+/tmp/tmpABC/databases/backends/mysql.py → databases/backends/mysql.py.
+
+Full suite: 128 tests green.
+
 ### 2026-05-30 (Phase 3 Step 5)
 Phase 3 Step 5 complete. RAG pipeline and LLM client interface built
 and verified end-to-end against a real indexed repo.
