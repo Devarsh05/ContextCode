@@ -133,6 +133,49 @@ frontend/
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (Citation paths: relative at source, cross-platform)
+Fixed citation file paths to be repo-relative and correct on both Windows
+and Linux. Root cause: chunks stored file_path as the absolute clone path,
+and app/api/chat.py patched it at read time with a POSIX-only regex
+(_TMP_SEGMENT_RE = /tmp[a-z0-9_]+/) that never matched Windows temp clone
+paths (C:\Users\...\AppData\Local\Temp\tmpXXX\...) — and the Celery worker
+runs natively on Windows in local dev.
+
+Fixed at the source. app/workers/tasks.py: new _to_repo_relative(abs_path,
+clone_root) helper — normalizes separators to '/' then uses
+posixpath.relpath, the cross-platform-deterministic form of os.path.relpath
+(does not depend on host path semantics, so the same forward-slash relative
+path results on Windows and on Railway/Linux). run_indexing_pipeline now
+relativizes each file against local_path (the clone root) before passing it
+to parser.parse, so CodeChunk.file_path — and therefore ChromaDB metadata,
+RAG citations, and the context shown to the LLM — is clean by construction.
+The Stage 7 graph build now uses the same helper (replacing its inline
+os.path.relpath), so chunk paths and graph node paths are derived
+identically. The now-unused `import os` was removed.
+
+app/api/chat.py: deleted _make_relative_path, _TMP_SEGMENT_RE, and the `re`
+import; citations pass c.file_path straight through (already relative).
+
+Trade-off accepted: repos indexed before this change keep absolute paths
+until re-indexed. Acceptable — this is local-dev-only data, there is no prod
+deployment yet (Phase 6 not started), and force_reindex=true drops and
+rebuilds chunks + Chroma. Chose the source fix over a platform-robust
+_make_relative_path because it makes paths clean by construction, improves
+the LLM context (not just the API response), and lets the regex hack be
+deleted entirely.
+
+tests/workers/test_tasks.py: TestRepoRelativePath (6 tests) covers POSIX and
+Windows-backslash clone roots, nested top-level dirs (no repo-name
+prepending), trailing separator on the root, and asserts results carry no
+backslashes or drive letters — all deterministic regardless of test host.
+TestRelativeChunkPaths runs the full pipeline and asserts stored
+CodeChunk.file_path values are repo-relative forward-slash (app/main.py,
+app/utils.py). tests/api/test_chat.py: removed the TestMakeRelativePath
+class and its import; the citation fixture is now already-relative and the
+endpoint test verifies pass-through.
+
+Full suite: 216 tests green.
+
 ### 2026-05-31 (CORS configuration)
 Configurable CORS support added to the FastAPI backend. Frontend deploys
 on Vercel and backend on Railway, so production requests are cross-origin.
