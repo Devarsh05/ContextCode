@@ -133,6 +133,38 @@ frontend/
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (Frontend API types from OpenAPI)
+Set up generation of TypeScript types from the FastAPI OpenAPI schema so the
+frontend is typed against the real backend contract instead of hand-written
+types.
+
+frontend/package.json: added openapi-typescript ^7.13.0 as a devDependency
+and a "gen:types" script:
+`openapi-typescript http://localhost:8000/openapi.json -o types/api.d.ts`.
+It reads the running backend's /openapi.json (FastAPI serves it
+automatically; uvicorn dev runs on :8000) and overwrites types/api.d.ts.
+
+frontend/types/api.d.ts: generated (not hand-written). Emits paths,
+components["schemas"], and operations for the whole API — IndexRequest/
+Response, ChatRequest/Response, CitationResponse, GraphResponse/
+GraphNodeResponse/GraphEdgeResponse, etc. Verified the file typechecks and
+the whole frontend project passes tsc --noEmit. Consumed via the existing
+@/* path alias, e.g.
+`import type { components } from "@/types/api"` →
+`components["schemas"]["GraphResponse"]`.
+
+frontend/README.md: added an "API Types" section documenting that the file
+is generated, must not be edited by hand, and how to regenerate it (start
+backend, npm run gen:types; or run the CLI with a custom URL).
+
+To produce the initial committed file without standing up Docker/Postgres,
+the schema was dumped offline from the app (app.openapi() with a dummy
+DATABASE_URL — create_async_engine does not connect at import) into a temp
+file, generated from it, and the temp file deleted. The committed script
+remains the canonical regen path against the live server.
+
+No backend code changed; backend suite unaffected (216 green).
+
 ### 2026-05-31 (Citation paths: relative at source, cross-platform)
 Fixed citation file paths to be repo-relative and correct on both Windows
 and Linux. Root cause: chunks stored file_path as the absolute clone path,
