@@ -5,13 +5,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.api.chat import _make_relative_path
 from app.models.repository import Repository
 from app.rag.pipeline import Citation
 
 
+# file_path is repo-relative by the time it reaches the endpoint — it is stored
+# that way at index time (see app/workers/tasks.py _to_repo_relative), so the
+# endpoint passes it straight through with no transformation.
 _CITATION = Citation(
-    file_path="/tmp/tmpabc/databases/backends/mysql.py",
+    file_path="databases/backends/mysql.py",
     function_name="connect",
     start_line=10,
     end_line=20,
@@ -23,41 +25,6 @@ _MOCK_ANSWER = {
     "answer": "The connect function [1] handles connections.",
     "citations": [_CITATION],
 }
-
-
-# ── _make_relative_path unit tests ────────────────────────────────────────────
-
-class TestMakeRelativePath:
-    def test_path_where_repo_dir_is_already_a_segment(self):
-        # File lives inside a directory whose name matches the repo name —
-        # stripping the tmp dir leaves the correct path already.
-        assert _make_relative_path(
-            "/tmp/tmpabc/databases/backends/mysql.py", "databases"
-        ) == "databases/backends/mysql.py"
-
-    def test_path_where_file_is_not_under_repo_named_dir(self):
-        # Broken case: file lives in a top-level directory (tests/) that has no
-        # /databases/ segment, so stripping tmp alone is not enough — the repo
-        # name must be prepended to produce a consistent relative path.
-        assert _make_relative_path(
-            "C:/Users/User/AppData/Local/Temp/tmpuudgj_ar/tests/test_databases.py",
-            "databases",
-        ) == "databases/tests/test_databases.py"
-
-    def test_windows_backslash_path_normalised(self):
-        # Windows backslashes must be normalised to forward slashes before the
-        # regex runs.
-        assert _make_relative_path(
-            "C:\\Users\\User\\AppData\\Local\\Temp\\tmpuudgj_ar\\tests\\test_databases.py",
-            "databases",
-        ) == "databases/tests/test_databases.py"
-
-    def test_no_tmp_segment_returns_normalised_path(self):
-        # If no tmp[a-z0-9_]+ segment is found, fall back to the normalised
-        # path unchanged.
-        assert _make_relative_path(
-            "databases/backends/mysql.py", "databases"
-        ) == "databases/backends/mysql.py"
 
 
 # ── POST /chat endpoint tests ─────────────────────────────────────────────────

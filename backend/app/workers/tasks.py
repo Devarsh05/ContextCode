@@ -1,5 +1,5 @@
 import logging
-import os
+import posixpath
 import tempfile
 import uuid
 from pathlib import Path
@@ -17,6 +17,24 @@ logger = logging.getLogger(__name__)
 
 _EMBED_BATCH = 200   # chunks per embedding progress tick
 _DB_BATCH = 500      # rows per session.add_all + flush
+
+
+# ── Path helpers ──────────────────────────────────────────────────────────────
+
+
+def _to_repo_relative(abs_path: str, clone_root: str) -> str:
+    """Return abs_path relative to clone_root as a forward-slash string.
+
+    Separators are normalized to '/' first and the relative path is computed
+    with posixpath, so the result is identical whether the worker runs on
+    Windows (native backslash temp clone paths like
+    C:\\Users\\...\\Temp\\tmpXXX\\pkg\\mod.py) or Linux (Railway). This is the
+    cross-platform-deterministic form of os.path.relpath — it does not depend
+    on the host's path semantics, so paths are clean by construction on both.
+    """
+    norm_path = abs_path.replace("\\", "/")
+    norm_root = clone_root.replace("\\", "/").rstrip("/")
+    return posixpath.relpath(norm_path, norm_root)
 
 
 # ── Sync DB helpers ───────────────────────────────────────────────────────────
@@ -98,7 +116,11 @@ def run_indexing_pipeline(
             if parser is None:
                 continue
             content = Path(file_path).read_text(encoding="utf-8", errors="replace")
-            for pc in parser.parse(file_path, content):
+            # Store the path relative to the clone root so chunk file_path is
+            # clean and portable (drives citations + the LLM context). Reading
+            # still uses the absolute path above.
+            rel_path = _to_repo_relative(file_path, local_path)
+            for pc in parser.parse(rel_path, content):
                 chunk_rows.append(
                     CodeChunk(
                         repo_id=repo_uuid,
@@ -159,9 +181,7 @@ def run_indexing_pipeline(
 
     _set_job(session, job_id, progress_pct=85, current_stage="building_graph")
     try:
-        rel_paths = [
-            os.path.relpath(p, local_path).replace(os.sep, "/") for p in file_paths
-        ]
+        rel_paths = [_to_repo_relative(p, local_path) for p in file_paths]
         result = GraphBuilder(session, local_path, rel_paths).build(repo_id)
         logger.info(
             "Dependency graph built: repo_id=%s nodes=%d edges=%d unresolved=%d",

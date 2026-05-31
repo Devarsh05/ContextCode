@@ -19,7 +19,7 @@ from app.models.graph import FileDependency, FileNode
 from app.models.indexing_job import IndexingJob
 from app.models.repository import Repository
 from app.services.vector_store import VectorStore
-from app.workers.tasks import run_indexing_pipeline
+from app.workers.tasks import _to_repo_relative, run_indexing_pipeline
 
 
 # ── Fake embedder (avoids loading sentence-transformers) ─────────────────────
@@ -99,6 +99,62 @@ def _run(repo, job, path, sync_db, test_store, fake_embedder, **kwargs):
 
 
 # ── Tests ───────────────────────────────────────────────────────────────────
+
+class TestRepoRelativePath:
+    """_to_repo_relative is deterministic on any host (normalize + posixpath),
+    so both Windows-style and POSIX-style inputs are verifiable here."""
+
+    def test_posix_clone_root(self):
+        assert _to_repo_relative(
+            "/tmp/tmp1a2b3c/databases/backends/mysql.py", "/tmp/tmp1a2b3c"
+        ) == "databases/backends/mysql.py"
+
+    def test_posix_nested_top_level_dir(self):
+        # File outside the repo's package dir is still relative to the clone root
+        # (no repo-name prepending like the old hack did).
+        assert _to_repo_relative(
+            "/tmp/tmp1a2b3c/tests/test_databases.py", "/tmp/tmp1a2b3c"
+        ) == "tests/test_databases.py"
+
+    def test_windows_backslash_clone_root(self):
+        assert _to_repo_relative(
+            "C:\\Users\\User\\AppData\\Local\\Temp\\tmpXYZ\\databases\\backends\\mysql.py",
+            "C:\\Users\\User\\AppData\\Local\\Temp\\tmpXYZ",
+        ) == "databases/backends/mysql.py"
+
+    def test_windows_nested_top_level_dir(self):
+        assert _to_repo_relative(
+            "C:\\Users\\User\\AppData\\Local\\Temp\\tmpXYZ\\tests\\test_databases.py",
+            "C:\\Users\\User\\AppData\\Local\\Temp\\tmpXYZ",
+        ) == "tests/test_databases.py"
+
+    def test_trailing_separator_on_root(self):
+        assert _to_repo_relative("/tmp/repo/pkg/mod.py", "/tmp/repo/") == "pkg/mod.py"
+
+    def test_result_has_no_backslashes_or_drive(self):
+        rel = _to_repo_relative("C:\\Temp\\tmpQ\\a\\b.py", "C:\\Temp\\tmpQ")
+        assert "\\" not in rel and ":" not in rel
+
+
+class TestRelativeChunkPaths:
+    def test_stored_chunk_paths_are_repo_relative(
+        self, sync_db, test_store, fake_embedder, repo_row, job_row, fixture_repo
+    ):
+        _run(repo_row, job_row, fixture_repo, sync_db, test_store, fake_embedder)
+
+        paths = {
+            c.file_path
+            for c in sync_db.execute(
+                select(CodeChunk).where(CodeChunk.repo_id == repo_row.id)
+            ).scalars().all()
+        }
+        assert paths  # chunks were produced
+        # The fixture clone root is tmp_path; stored paths must be relative to it.
+        assert all(p.startswith("app/") for p in paths)
+        assert all("\\" not in p and ":" not in p for p in paths)
+        assert "app/main.py" in paths
+        assert "app/utils.py" in paths
+
 
 class TestGraphPhaseWiring:
     def test_graph_build_runs_after_embedding(
