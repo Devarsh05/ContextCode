@@ -4,6 +4,7 @@ from dataclasses import FrozenInstanceError
 from app.graph.extractors.base import BaseExtractor, ImportEdge
 from app.graph.extractors.python_extractor import PythonExtractor
 from app.graph.extractors.javascript_extractor import JavaScriptExtractor
+from app.graph.extractors.registry import get_extractor
 
 
 class TestImportEdgeDataclass:
@@ -196,3 +197,39 @@ class TestJavaScriptExtractor:
         src = "import { foo } from 'bar'"
         edges = JavaScriptExtractor().extract("a.js", src)
         assert edges[0].import_raw == "import { foo } from 'bar'"
+
+
+class TestExtractorRegistry:
+    @pytest.mark.parametrize("path,expected_cls", [
+        ("src/app.py",  PythonExtractor),
+        ("src/app.js",  JavaScriptExtractor),
+        ("src/app.jsx", JavaScriptExtractor),
+        ("src/app.ts",  JavaScriptExtractor),
+        ("src/app.tsx", JavaScriptExtractor),
+    ])
+    def test_returns_correct_extractor_type(self, path, expected_cls):
+        assert isinstance(get_extractor(path), expected_cls)
+
+    def test_go_returns_none(self):
+        assert get_extractor("main.go") is None
+
+    def test_rb_returns_none(self):
+        assert get_extractor("script.rb") is None
+
+    def test_unknown_extension_returns_none(self):
+        assert get_extractor("file.unknown") is None
+
+    def test_no_extension_returns_none(self):
+        assert get_extractor("Makefile") is None
+
+    def test_python_instance_is_cached(self):
+        assert get_extractor("a.py") is get_extractor("b.py")
+
+    def test_js_and_ts_share_same_instance(self):
+        # Registry caches by class type — all JS/TS exts return same object
+        assert get_extractor("a.js") is get_extractor("a.ts")
+        assert get_extractor("a.ts") is get_extractor("a.tsx")
+        assert get_extractor("a.tsx") is get_extractor("a.jsx")
+
+    def test_python_and_js_are_different_instances(self):
+        assert get_extractor("a.py") is not get_extractor("a.js")
