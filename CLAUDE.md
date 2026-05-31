@@ -125,7 +125,7 @@ frontend/
     [x] Step 6 — POST /chat endpoint
 [ ] Phase 4 — Dependency graph
     [x] Step 1 — Graph data models & migration
-    [ ] Step 2 — Import extractors
+    [x] Step 2 — Import extractors
     [ ] Step 3 — Graph builder service
     [ ] Step 4 — Wire into Celery
     [ ] Step 5 — GET /repos/{id}/graph endpoint
@@ -133,6 +133,39 @@ frontend/
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (Phase 4 Step 2)
+Phase 4 Step 2 complete. Import extractors built and verified.
+
+app/graph/extractors/base.py: ImportEdge frozen dataclass (source_file,
+import_raw, target_module) and BaseExtractor ABC with abstract extract()
+method. Mirrors app/parsers/base.py pattern exactly.
+
+app/graph/extractors/python_extractor.py: PythonExtractor uses stdlib
+ast.walk (not tree-sitter) to find ast.Import and ast.ImportFrom nodes.
+Reconstructs import_raw from AST fields. One edge per alias in ast.Import;
+one edge per alias in ast.ImportFrom. target_module uses dot-join logic
+with special case for relative-only imports (level>0, module=None) where
+base ends with "." and alias is concatenated directly to avoid "..foo"
+vs ".foo" confusion. Never raises — logs warning on SyntaxError and
+returns [].
+
+app/graph/extractors/javascript_extractor.py: JavaScriptExtractor uses
+four compiled regex patterns for static ESM imports, dynamic import(),
+CommonJS require(), and export...from re-exports. Static pattern uses
+[ \t]+ (space/tab only, not \s+) plus (?![(]) negative lookahead to
+distinguish import('./dynamic') from static imports. require() uses
+(?<![.\w]) lookbehind to avoid matching obj.require(). One edge per
+import statement. target_module = raw specifier extracted from import_raw.
+Deduplicates by match span to prevent double-counting.
+
+app/graph/extractors/registry.py: get_extractor(file_path) maps extension
+to extractor class and caches by class type — .js, .jsx, .ts, .tsx all
+return the same JavaScriptExtractor instance. .py returns PythonExtractor.
+Returns None for unsupported extensions.
+
+tests/graph/test_extractors.py: 46 tests covering all specified cases.
+Full suite: 182 tests green.
+
 ### 2026-05-30 (Phase 4 Step 1)
 Phase 4 Step 1 complete. Dependency graph data models and Alembic
 migration added.
