@@ -126,13 +126,63 @@ frontend/
 [ ] Phase 4 — Dependency graph
     [x] Step 1 — Graph data models & migration
     [x] Step 2 — Import extractors
-    [ ] Step 3 — Graph builder service
+    [x] Step 3 — Graph builder service
     [ ] Step 4 — Wire into Celery
     [ ] Step 5 — GET /repos/{id}/graph endpoint
 [ ] Phase 5 — Frontend
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (Phase 4 Step 3)
+Phase 4 Step 3 complete. Graph builder service at app/graph/builder.py
+turns extracted imports into persisted FileNode + FileDependency rows.
+
+resolve_import(source_file, target_module, repo_root, all_file_paths) ->
+str | None: module-level pure helper, never raises. Routes Python vs
+JS/TS by the importing file's extension. Python: relative imports
+count leading dots for level (base = source dir walked up level-1
+parents), absolute imports resolve from repo root; segments tried as
+.py and __init__.py, AND with the trailing symbol segment stripped so
+`from foo import bar` (extractor emits target "foo.bar") resolves to
+foo.py. Star segments ignored. JS/TS: bare specifiers (no leading dot)
+→ None (node_modules/built-in); relative specifiers resolved via
+posixpath.normpath then tried exact, +.js/.ts/.jsx/.tsx, and
+/index.js//index.ts. All paths normalized to forward slashes via
+posixpath so resolution is OS-independent.
+
+GraphBuilder(db_session, repo_root, all_file_paths) uses a synchronous
+SQLAlchemy session, mirroring run_indexing_pipeline's session style.
+build(repo_id): deletes existing FileDependency + FileNode rows for the
+repo (repo_id normalized with uuid.UUID(str(repo_id)) — UUID FK, not
+int as the spec text said), then per file gets the extractor (skip if
+None), reads from disk (OSError → log + skip), extracts edges, and
+resolves each. One FileDependency row per import statement whether or
+not it resolved (target_file=None when unresolved, import_raw always
+kept). import_count/imported_by_count computed from resolved edges
+only. One FileNode per code file in all_file_paths (language via
+get_language_for_file), so isolated files still appear as nodes.
+Bulk add_all for nodes and deps, single commit. Returns
+GraphBuildResult(node_count, edge_count, unresolved_count). Per-file
+try/except means build() never raises on a single bad file.
+
+tests/graph/test_builder.py: 17 tests. resolve_import unit coverage
+(Python relative symbol-strip, relative no-module, absolute unresolved,
+absolute package __init__, JS suffix, JS index file, JS bare specifier,
+never-raises). GraphBuilder against on-disk fixture repos: nodes+deps
+created, relative imports resolve, unresolved imports get None target
+with raw preserved, import/imported_by counts accurate, JS relative
+resolves, JS node_modules → None, idempotent rebuild replaces rows,
+missing file skipped while rest of graph builds, result counts exact
+(3 nodes / 3 edges / 1 unresolved on the Python fixture).
+
+Reused get_extractor (graph extractors registry), get_language_for_file
+(parsers registry), and the delete()+commit() session pattern from
+app/workers/tasks.py. Sync SQLite session fixture copied from the
+Phase 3 worker tests (conftest db_session is async, can't drive sync
+code).
+
+Full suite: 199 tests green.
+
 ### 2026-05-31 (Phase 4 Step 2)
 Phase 4 Step 2 complete. Import extractors built for Python and
 JavaScript/TypeScript.
