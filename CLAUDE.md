@@ -133,6 +133,31 @@ frontend/
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (SSE EventSource compatibility verified)
+Verified GET /repos/{id}/status is compatible with the browser EventSource
+API. No code fix was needed — the endpoint already meets the contract:
+- content-type text/event-stream (sse_starlette sets
+  "text/event-stream; charset=utf-8"; EventSource matches the MIME essence
+  and ignores params).
+- GET-only: the route is registered with @router.get exclusively; other
+  methods get 405.
+- No custom request headers required: repo_status's signature is only
+  repo_id (path param, in the URL) and the db dependency — no Header(...)
+  params, which matters because EventSource cannot set custom headers.
+- Proper framing: sse_starlette 3.4.4 encodes each event as
+  `data: {json}\r\n\r\n` (confirmed via ServerSentEvent.encode()); CRLF is
+  valid per the WHATWG SSE spec and accepted by browsers.
+
+tests/test_repos_api.py: added two tests. test_status_sse_is_browser_
+eventsource_compatible streams the raw response, asserts content-type
+startswith text/event-stream, and regex-matches a `data: {...}` line
+terminated by a blank line (\r?\n\r?\n) on the raw bytes; it sends no
+custom headers. test_status_sse_is_get_only asserts POST to the status
+path returns 405. The existing test_status_sse_streams_completed_event
+(content-type + parsed event) is retained.
+
+Full suite: 218 tests green.
+
 ### 2026-05-31 (Frontend API types from OpenAPI)
 Set up generation of TypeScript types from the FastAPI OpenAPI schema so the
 frontend is typed against the real backend contract instead of hand-written
