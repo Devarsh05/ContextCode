@@ -127,12 +127,50 @@ frontend/
     [x] Step 1 — Graph data models & migration
     [x] Step 2 — Import extractors
     [x] Step 3 — Graph builder service
-    [ ] Step 4 — Wire into Celery
+    [x] Step 4 — Wire into Celery
     [ ] Step 5 — GET /repos/{id}/graph endpoint
 [ ] Phase 5 — Frontend
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (Phase 4 Step 4)
+Phase 4 Step 4 complete. GraphBuilder wired into the index_repository
+Celery task as a new non-fatal phase after ChromaDB storage.
+
+app/workers/tasks.py: added Stage 7 (dependency graph) to
+run_indexing_pipeline, between embed/store and final completion. Sets
+progress 85 / current_stage "building_graph", relativizes the Stage 2
+file_paths (os.path.relpath against local_path, backslashes → forward
+slashes) without re-walking, runs GraphBuilder(session, local_path,
+rel_paths).build(repo_id), then sets progress 95. The builder uses the
+same sync session as the rest of the task (local import of GraphBuilder
+inside run_indexing_pipeline). Graph build is best-effort: any
+exception is caught, the session is rolled back (so the later progress
+and completion commits still succeed), and a warning is logged — the
+indexing job still completes. repo_root passed is the clone directory
+(local_path).
+
+Progress checkpoints remapped across all phases: 10 cloned, 30 walked,
+30–55 parsing, 60 persisting, 60–80 embedding (80 = parsing+embedding
+done), 85 graph build start, 95 graph build done, 100 complete. The
+old "no chunks → mark complete and return early" branch was removed:
+embed/store is now guarded by `if chunk_rows`, and the graph phase +
+completion run unconditionally, so a repo that yields zero code chunks
+(e.g. only README/yaml) still gets a graph pass and finishes at 100.
+
+tests/workers/test_tasks.py: 5 new tests (sync SQLite session, fake
+embedder, real VectorStore on tmp_path). Verified: graph build runs
+after embedding (call-order spy on embed_texts vs a stub builder),
+graph build failure does not fail the job (stub builder raises
+RuntimeError → job still ends "completed", progress 100, no
+error_message), progress hits 80 → 85 → 95 → 100 in order (spy on
+_set_job), graph rows persisted end-to-end (app/main.py → app/utils.py
+resolved edge present, `import os` stored unresolved), and a zero-chunk
+repo still completes at 100 through the graph phase.
+
+Existing Phase 3 worker tests (test_index_repository_phase3.py) stay
+green under the new checkpoints. Full suite: 204 tests green.
+
 ### 2026-05-31 (Phase 4 Step 3)
 Phase 4 Step 3 complete. Graph builder service built and verified.
 
