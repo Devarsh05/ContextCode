@@ -123,16 +123,76 @@ frontend/
     [x] Step 4 — Wire parsing+embedding into Celery
     [x] Step 5 — RAG pipeline + LLM client
     [x] Step 6 — POST /chat endpoint
-[ ] Phase 4 — Dependency graph
+[x] Phase 4 — Dependency graph
     [x] Step 1 — Graph data models & migration
     [x] Step 2 — Import extractors
     [x] Step 3 — Graph builder service
     [x] Step 4 — Wire into Celery
-    [ ] Step 5 — GET /repos/{id}/graph endpoint
+    [x] Step 5 — GET /repos/{id}/graph endpoint
 [ ] Phase 5 — Frontend
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (Phase 4 Step 5 + Phase 4 complete)
+Phase 4 Step 5 complete. GET /repos/{repo_id}/graph endpoint built and
+verified. Phase 4 (Dependency graph) is now fully done.
+
+app/api/graph.py: new router APIRouter(prefix="/repos", tags=["graph"])
+sharing the /repos prefix with repos.py. GET /{repo_id}/graph with
+repo_id: UUID path param (FastAPI auto-validates) and resolved_only:
+bool = False query param. 404 if repo missing, 400 if status !=
+"completed" (mirrors chat.py validation). Loads FileNode rows ordered
+imported_by_count DESC then file_path ASC (most-central files first,
+deterministic ties), FileDependency rows ordered source_file ASC; when
+resolved_only=true the edge query adds target_file IS NOT NULL.
+node_count/edge_count reflect the returned (post-filter) lists. Returns
+GraphResponse with repo_id=str(repo.id).
+
+app/api/schemas.py: added GraphNodeResponse (file_path, language,
+import_count, imported_by_count), GraphEdgeResponse (source_file,
+target_file: str | None, import_raw), GraphResponse (repo_id: str,
+node_count, edge_count, nodes, edges). repo_id is str not int as the
+spec text said — repo ids are UUIDs throughout this codebase.
+
+app/main.py: registered graph_router alongside repos_router and
+chat_router.
+
+tests/api/test_graph_endpoint.py: 7 tests using the async_client +
+db_session fixtures. 404 on unknown repo, 400 on not-completed repo,
+200 with correct node/edge counts and payload shape (incl. an
+unresolved target_file=None edge), edges sorted by source_file asc,
+resolved_only=true drops the unresolved edge (edge_count 2 → 1, no null
+targets), nodes sorted imported_by_count desc (core.py imported_by=3
+first), empty graph (completed repo, no rows) → 200 with empty lists
+and zero counts.
+
+Full suite: 211 tests green.
+
+Phase 4 summary (Steps 1–5):
+- Step 1: FileNode (repo_id, file_path, language, import_count,
+  imported_by_count; unique (repo_id, file_path)) and FileDependency
+  (repo_id, source_file, target_file NULLABLE, import_raw; index on
+  (repo_id, source_file)) ORM models + Alembic migration, CASCADE on
+  repository delete.
+- Step 2: per-file import extractors (app/graph/extractors/) emitting
+  ImportEdge(source_file, import_raw, target_module). PythonExtractor
+  (stdlib ast, one edge per imported name), JavaScriptExtractor (regex,
+  one edge per statement, .js/.jsx/.ts/.tsx), registry.get_extractor
+  cached by class. Never raise.
+- Step 3: app/graph/builder.py — resolve_import (Python relative/
+  absolute with .py and __init__.py and symbol-strip fallbacks; JS
+  relative with extension and /index fallbacks; bare specifiers and
+  third-party → None; never raises) and GraphBuilder.build(repo_id) →
+  GraphBuildResult, persisting FileNode + FileDependency via a sync
+  session, computing in/out degree from resolved edges, idempotent
+  rebuild, per-file errors swallowed.
+- Step 4: GraphBuilder wired into run_indexing_pipeline as a non-fatal
+  phase after ChromaDB storage. Progress 10/30/80/85/95/100; graph
+  failure logged + rolled back, job still completes.
+- Step 5: GET /repos/{repo_id}/graph read endpoint (this entry).
+
+Next: Phase 5 — Frontend.
+
 ### 2026-05-31 (Phase 4 Step 4)
 Phase 4 Step 4 complete. GraphBuilder wired into the index_repository
 Celery task.
