@@ -38,3 +38,24 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: list[CitationResponse]
+
+
+class GraphNodeResponse(BaseModel):
+    file_path: str
+    language: str
+    import_count: int
+    imported_by_count: int
+
+
+class GraphEdgeResponse(BaseModel):
+    source_file: str
+    target_file: str | None
+    import_raw: str
+
+
+class GraphResponse(BaseModel):
+    repo_id: str
+    node_count: int
+    edge_count: int
+    nodes: list[GraphNodeResponse]
+    edges: list[GraphEdgeResponse]
