@@ -133,6 +133,28 @@ frontend/
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-05-31 (CORS configuration)
+Configurable CORS support added to the FastAPI backend. Frontend deploys
+on Vercel and backend on Railway, so production requests are cross-origin.
+
+app/main.py: CORSMiddleware allow_origins now driven by the
+CORS_ALLOW_ORIGINS env var (comma-separated, whitespace-trimmed, empties
+dropped), defaulting to http://localhost:3000 for local dev. Added
+load_dotenv() at module top to match database.py/celery_app.py. Keeps
+allow_credentials=True, allow_methods=["*"], allow_headers=["*"]. The
+middleware wraps the whole ASGI app, so it also covers the GET
+/repos/{id}/status SSE stream (the Access-Control-Allow-Origin header is
+applied to streamed responses and to CORS preflight on that route).
+
+tests/test_cors.py: 2 tests. First asserts a GET /health from origin
+http://localhost:3000 returns access-control-allow-origin equal to the
+origin and access-control-allow-credentials true. Second issues a CORS
+preflight (OPTIONS + Access-Control-Request-Method: GET) against
+/repos/{uuid}/status and asserts the same headers — confirming CORS
+covers the SSE endpoint without starting the stream or hitting the DB.
+
+Full suite: 213 tests green.
+
 ### 2026-05-31 (Phase 4 Step 5 + Phase 4 complete)
 Phase 4 Step 5 complete. GET /repos/{repo_id}/graph endpoint built and
 verified. Phase 4 (Dependency graph) is now fully done.
