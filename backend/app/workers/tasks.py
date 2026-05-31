@@ -1,4 +1,5 @@
 import logging
+import os
 import tempfile
 import uuid
 from pathlib import Path
@@ -77,15 +78,15 @@ def run_indexing_pipeline(
         session.commit()
         vector_store.drop_collection(repo_id_str)
 
-    # ── Stage 2: Walk + enforce size limits (progress: 20%) ──────────────────
-    _set_job(session, job_id, progress_pct=20, current_stage="walking")
+    # ── Stage 2: Walk + enforce size limits (progress: 30%) ──────────────────
+    _set_job(session, job_id, progress_pct=30, current_stage="walking")
     IngestionService.enforce_size_limits(local_path)
     file_paths = list(IngestionService.walk_repository(local_path))
     file_count = len(file_paths)
     _set_repo(session, repo_id, file_count=file_count)
 
-    # ── Stage 3: Parse files into CodeChunk ORM objects (progress: 20–50%) ──
-    _set_job(session, job_id, progress_pct=22, current_stage="parsing")
+    # ── Stage 3: Parse files into CodeChunk ORM objects (progress: 30–55%) ──
+    _set_job(session, job_id, progress_pct=32, current_stage="parsing")
     chunk_rows: list[CodeChunk] = []
 
     for i, file_path in enumerate(file_paths):
@@ -114,47 +115,67 @@ def run_indexing_pipeline(
             logger.warning("Parse error on %s — skipping file", file_path, exc_info=True)
 
         if file_count > 0:
-            pct = 20 + int(30 * (i + 1) / file_count)
+            pct = 30 + int(25 * (i + 1) / file_count)
             _set_job(session, job_id, progress_pct=pct, current_stage="parsing")
 
-    # ── Stage 4: Persist CodeChunk rows (batched, progress: 50%) ─────────────
-    _set_job(session, job_id, progress_pct=50, current_stage="persisting")
+    # ── Stage 4: Persist CodeChunk rows (batched, progress: 60%) ─────────────
+    _set_job(session, job_id, progress_pct=60, current_stage="persisting")
     for i in range(0, len(chunk_rows), _DB_BATCH):
         session.add_all(chunk_rows[i : i + _DB_BATCH])
         session.flush()
     session.commit()
 
-    # Nothing to embed/store — mark complete and return early
-    if not chunk_rows:
-        _set_job(session, job_id, progress_pct=100, status="completed", current_stage=None)
-        _set_repo(session, repo_id, status="completed")
-        return file_count
+    # ── Stages 5–6: Embed + store in Chroma (progress: 60–80%) ───────────────
+    # Skipped when there are no chunks; the dependency graph is still built.
+    if chunk_rows:
+        try:
+            all_embeddings: list[list[float]] = []
+            total = len(chunk_rows)
 
-    # ── Stages 5–6: Embed + store in Chroma (progress: 50–100%) ──────────────
+            for i in range(0, total, _EMBED_BATCH):
+                batch = chunk_rows[i : i + _EMBED_BATCH]
+                all_embeddings.extend(embedder.embed_texts([c.content for c in batch]))
+                pct = 60 + int(20 * min(i + _EMBED_BATCH, total) / total)
+                _set_job(session, job_id, progress_pct=pct, current_stage="embedding")
+
+            # ── Stage 6: Write to Chroma (progress: 80%) ─────────────────────
+            _set_job(session, job_id, progress_pct=80, current_stage="storing")
+            vector_store.add_chunks(repo_id_str, chunk_rows, all_embeddings)
+
+        except Exception as exc:
+            logger.exception("Pipeline failed: repo_id=%s error=%s", repo_id, exc)
+            _set_job(
+                session, job_id,
+                status="failed", error_message=str(exc), current_stage=None,
+            )
+            _set_repo(session, repo_id, status="failed")
+            raise
+
+    # ── Stage 7: Build dependency graph (non-fatal, progress: 85–95%) ────────
+    # Graph build failure must NOT fail the indexing job — log a warning and
+    # carry on to completion. Reuses the Stage 2 file list (no re-walk); paths
+    # are made repo-relative (forward slashes) for the builder.
+    from app.graph.builder import GraphBuilder
+
+    _set_job(session, job_id, progress_pct=85, current_stage="building_graph")
     try:
-        all_embeddings: list[list[float]] = []
-        total = len(chunk_rows)
-
-        for i in range(0, total, _EMBED_BATCH):
-            batch = chunk_rows[i : i + _EMBED_BATCH]
-            all_embeddings.extend(embedder.embed_texts([c.content for c in batch]))
-            pct = 50 + int(40 * min(i + _EMBED_BATCH, total) / total)
-            _set_job(session, job_id, progress_pct=pct, current_stage="embedding")
-
-        # ── Stage 6: Write to Chroma (progress: 90%) ─────────────────────────
-        _set_job(session, job_id, progress_pct=90, current_stage="storing")
-        vector_store.add_chunks(repo_id_str, chunk_rows, all_embeddings)
-
-    except Exception as exc:
-        logger.exception("Pipeline failed: repo_id=%s error=%s", repo_id, exc)
-        _set_job(
-            session, job_id,
-            status="failed", error_message=str(exc), current_stage=None,
+        rel_paths = [
+            os.path.relpath(p, local_path).replace(os.sep, "/") for p in file_paths
+        ]
+        result = GraphBuilder(session, local_path, rel_paths).build(repo_id)
+        logger.info(
+            "Dependency graph built: repo_id=%s nodes=%d edges=%d unresolved=%d",
+            repo_id, result.node_count, result.edge_count, result.unresolved_count,
         )
-        _set_repo(session, repo_id, status="failed")
-        raise
+    except Exception:
+        session.rollback()
+        logger.warning(
+            "Dependency graph build failed for repo_id=%s — indexing continues",
+            repo_id, exc_info=True,
+        )
+    _set_job(session, job_id, progress_pct=95, current_stage="building_graph")
 
-    # ── Stage 7: Mark complete (progress: 100%) ───────────────────────────────
+    # ── Stage 8: Mark complete (progress: 100%) ──────────────────────────────
     _set_job(session, job_id, progress_pct=100, status="completed", current_stage=None)
     _set_repo(session, repo_id, status="completed")
 
@@ -187,7 +208,7 @@ def index_repository(
 
     with SyncSessionLocal() as session:
         try:
-            _set_job(session, job_id, status="running", progress_pct=5, current_stage="cloning")
+            _set_job(session, job_id, status="running", progress_pct=10, current_stage="cloning")
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 IngestionService.clone_repository(repo_url, tmp_dir)
