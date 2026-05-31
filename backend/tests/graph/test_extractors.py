@@ -3,6 +3,7 @@ from dataclasses import FrozenInstanceError
 
 from app.graph.extractors.base import BaseExtractor, ImportEdge
 from app.graph.extractors.python_extractor import PythonExtractor
+from app.graph.extractors.javascript_extractor import JavaScriptExtractor
 
 
 class TestImportEdgeDataclass:
@@ -113,3 +114,85 @@ class TestPythonExtractor:
 
     def test_no_imports_returns_empty(self):
         assert PythonExtractor().extract("a.py", "x = 1\nprint(x)") == []
+
+
+class TestJavaScriptExtractor:
+    def test_default_import(self):
+        edges = JavaScriptExtractor().extract("a.js", "import React from 'react'")
+        assert len(edges) == 1
+        assert edges[0].target_module == "react"
+        assert edges[0].source_file == "a.js"
+
+    def test_named_import(self):
+        edges = JavaScriptExtractor().extract("a.js", "import { bar, baz } from '../lib/utils'")
+        assert len(edges) == 1
+        assert edges[0].target_module == "../lib/utils"
+
+    def test_namespace_import(self):
+        edges = JavaScriptExtractor().extract("a.ts", "import * as utils from './utils'")
+        assert len(edges) == 1
+        assert edges[0].target_module == "./utils"
+
+    def test_side_effect_import(self):
+        edges = JavaScriptExtractor().extract("a.js", "import 'side-effect'")
+        assert len(edges) == 1
+        assert edges[0].target_module == "side-effect"
+
+    def test_dynamic_import(self):
+        edges = JavaScriptExtractor().extract("a.js", "const m = await import('./dynamic')")
+        assert len(edges) == 1
+        assert edges[0].target_module == "./dynamic"
+
+    def test_dynamic_import_not_matched_by_static_pattern(self):
+        # import('./foo') must produce exactly one edge, not two
+        edges = JavaScriptExtractor().extract("a.js", "import('./foo')")
+        assert len(edges) == 1
+        assert "import('./foo')" in edges[0].import_raw
+
+    def test_require(self):
+        edges = JavaScriptExtractor().extract("a.js", "const fs = require('./something')")
+        assert len(edges) == 1
+        assert edges[0].target_module == "./something"
+
+    def test_require_not_matched_on_method_call(self):
+        # obj.require('./foo') must NOT produce an edge
+        edges = JavaScriptExtractor().extract("a.js", "obj.require('./foo')")
+        assert len(edges) == 0
+
+    def test_reexport_named(self):
+        edges = JavaScriptExtractor().extract("a.js", "export { x } from './other'")
+        assert len(edges) == 1
+        assert edges[0].target_module == "./other"
+
+    def test_reexport_star(self):
+        edges = JavaScriptExtractor().extract("a.ts", "export * from './other'")
+        assert len(edges) == 1
+        assert edges[0].target_module == "./other"
+
+    def test_multiple_imports_in_file(self):
+        src = "import React from 'react';\nimport { useState } from 'react';\n"
+        edges = JavaScriptExtractor().extract("a.jsx", src)
+        assert len(edges) == 2
+        assert all(e.target_module == "react" for e in edges)
+
+    def test_one_edge_per_import_statement_not_per_symbol(self):
+        # { bar, baz } is ONE statement → one edge
+        edges = JavaScriptExtractor().extract("a.ts", "import { bar, baz } from 'lib'")
+        assert len(edges) == 1
+
+    def test_tsx_file(self):
+        edges = JavaScriptExtractor().extract("a.tsx", "import Component from './Component'")
+        assert len(edges) == 1
+        assert edges[0].target_module == "./Component"
+
+    def test_empty_file(self):
+        assert JavaScriptExtractor().extract("a.ts", "") == []
+
+    def test_no_imports_file(self):
+        src = "const x = 1;\nfunction foo() { return x; }\n"
+        assert JavaScriptExtractor().extract("a.js", src) == []
+
+    def test_import_raw_is_full_match(self):
+        src = "import { foo } from 'bar'"
+        edges = JavaScriptExtractor().extract("a.js", src)
+        assert edges[0].import_raw == "import { foo } from 'bar'"
