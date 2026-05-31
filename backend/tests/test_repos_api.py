@@ -6,6 +6,7 @@ test database. The Celery task dispatch is mocked to prevent network calls.
 """
 
 import json
+import re
 import uuid
 from unittest.mock import patch
 
@@ -168,3 +169,42 @@ async def test_status_sse_streams_completed_event(async_client, db_session):
     assert events[0]["progress_pct"] == 100
     assert events[0]["current_stage"] is None
     assert events[0]["error_message"] is None
+
+
+async def test_status_sse_is_browser_eventsource_compatible(async_client, db_session):
+    """Verifies the contract a browser EventSource client relies on:
+    text/event-stream content-type and correctly framed `data: ...\\n\\n` events.
+    """
+    repo = Repository(url="https://github.com/owner/sse-frame", name="sse-frame")
+    db_session.add(repo)
+    await db_session.flush()
+
+    job = IndexingJob(repo_id=repo.id, status="completed", progress_pct=100)
+    db_session.add(job)
+    await db_session.commit()
+
+    # No custom request headers are sent — EventSource cannot set any.
+    async with async_client.stream("GET", f"/repos/{repo.id}/status") as response:
+        assert response.status_code == 200
+        # EventSource checks the MIME essence and ignores params (e.g. charset).
+        assert response.headers["content-type"].startswith("text/event-stream")
+
+        raw = b""
+        async for chunk in response.aiter_bytes():
+            raw += chunk
+            if b"\n\n" in raw:  # a complete event frame has arrived
+                break
+
+    # Event is framed as a `data:` line terminated by a blank line (CRLF or LF
+    # both accepted by the spec / browsers).
+    assert re.search(rb"data: \{.*\}\r?\n\r?\n", raw)
+
+
+async def test_status_sse_is_get_only(async_client, db_session):
+    """EventSource issues GET only; the route must reject other methods."""
+    repo = Repository(url="https://github.com/owner/sse-get", name="sse-get")
+    db_session.add(repo)
+    await db_session.commit()
+
+    response = await async_client.post(f"/repos/{repo.id}/status")
+    assert response.status_code == 405  # Method Not Allowed
