@@ -134,36 +134,44 @@ frontend/
 
 ## Session Log
 ### 2026-05-31 (Phase 4 Step 2)
-Phase 4 Step 2 complete. Import extractors built and verified.
+Phase 4 Step 2 complete. Import extractors built for Python and
+JavaScript/TypeScript.
 
-app/graph/extractors/base.py: ImportEdge frozen dataclass (source_file,
-import_raw, target_module) and BaseExtractor ABC with abstract extract()
-method. Mirrors app/parsers/base.py pattern exactly.
+app/graph/extractors/base.py: ImportEdge frozen dataclass with fields
+source_file, import_raw, target_module. BaseExtractor abstract base
+class with single abstract method extract(file_path, source_code) ->
+list[ImportEdge].
 
-app/graph/extractors/python_extractor.py: PythonExtractor uses stdlib
-ast.walk (not tree-sitter) to find ast.Import and ast.ImportFrom nodes.
-Reconstructs import_raw from AST fields. One edge per alias in ast.Import;
-one edge per alias in ast.ImportFrom. target_module uses dot-join logic
-with special case for relative-only imports (level>0, module=None) where
-base ends with "." and alias is concatenated directly to avoid "..foo"
-vs ".foo" confusion. Never raises — logs warning on SyntaxError and
-returns [].
+app/graph/extractors/python_extractor.py: PythonExtractor using stdlib
+ast module. Handles simple imports (import os), dotted imports
+(import foo.bar.baz), from imports single and multi-symbol (from foo
+import bar, baz → two edges foo.bar and foo.baz), relative imports
+(from .relative import x → .relative.x preserving leading dots), star
+imports (from foo import *), and parenthesized multi-imports. Never
+raises — catches SyntaxError and all parse failures, logs a warning,
+and returns partial results or empty list.
 
-app/graph/extractors/javascript_extractor.py: JavaScriptExtractor uses
-four compiled regex patterns for static ESM imports, dynamic import(),
-CommonJS require(), and export...from re-exports. Static pattern uses
-[ \t]+ (space/tab only, not \s+) plus (?![(]) negative lookahead to
-distinguish import('./dynamic') from static imports. require() uses
-(?<![.\w]) lookbehind to avoid matching obj.require(). One edge per
-import statement. target_module = raw specifier extracted from import_raw.
-Deduplicates by match span to prevent double-counting.
+app/graph/extractors/javascript_extractor.py: JavaScriptExtractor using
+regex-based extraction. Handles named imports (import { bar } from),
+default imports (import React from), namespace imports (import * as x
+from), dynamic imports (import('./dynamic')), CommonJS require(),
+re-exports (export { x } from), and export star (export * from).
+target_module is the raw specifier string. One ImportEdge per import
+statement, not per symbol. Supports .js, .jsx, .ts, .tsx files.
 
-app/graph/extractors/registry.py: get_extractor(file_path) maps extension
-to extractor class and caches by class type — .js, .jsx, .ts, .tsx all
-return the same JavaScriptExtractor instance. .py returns PythonExtractor.
-Returns None for unsupported extensions.
+app/graph/extractors/registry.py: get_extractor(file_path) maps
+extensions to cached extractor instances. .py → PythonExtractor,
+.js/.jsx/.ts/.tsx → JavaScriptExtractor, all others → None. Instances
+are cached — same object returned for repeated calls.
 
-tests/graph/test_extractors.py: 46 tests covering all specified cases.
+tests/graph/test_extractors.py: Full test coverage across all extractor
+types and the registry. Verified: PythonExtractor handles all import
+forms and never raises on broken syntax. JavaScriptExtractor handles
+all import/export/require forms and returns empty list for files with
+no imports. Registry maps all supported extensions correctly and
+returns None for unsupported extensions. Extractor instances are
+cached.
+
 Full suite: 182 tests green.
 
 ### 2026-05-30 (Phase 4 Step 1)
