@@ -2,26 +2,101 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * ContextCode design tokens — SINGLE SOURCE OF TRUTH.
+ * "Indigo Slate": dark-mode-first, electric-indigo accent on refined slate.
+ * tailwind.config.ts only references these via hsl(var(--token)); it never
+ * hardcodes colors. Values are HSL triplets (shadcn convention).
+ * See DESIGN.md for the hex intent + rationale.
+ */
 
-@media (prefers-color-scheme: dark) {
+@layer base {
+  /* Light fallback — exists so next-themes can toggle; dark is canonical. */
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 158 64% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 239 84% 67%;
+
+    --radius: 0.625rem;
+  }
+
+  /* Canonical theme. */
+  .dark {
+    --background: 220 21% 5%;
+    --foreground: 220 30% 96%;
+
+    --card: 223 17% 8%;
+    --card-foreground: 220 30% 96%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 220 30% 96%;
+
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 16% 12%;
+    --secondary-foreground: 220 30% 96%;
+
+    --muted: 220 18% 10%;
+    --muted-foreground: 218 12% 59%;
+
+    --accent: 220 16% 15%;
+    --accent-foreground: 220 30% 96%;
+
+    --destructive: 0 91% 71%;
+    --destructive-foreground: 220 30% 8%;
+
+    --success: 158 64% 52%;
+    --success-foreground: 220 30% 8%;
+
+    --warning: 43 96% 56%;
+    --warning-foreground: 220 30% 8%;
+
+    --border: 220 16% 15%;
+    --input: 219 17% 16%;
+    --ring: 239 84% 67%;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  ::selection {
+    @apply bg-primary/30 text-foreground;
   }
 }

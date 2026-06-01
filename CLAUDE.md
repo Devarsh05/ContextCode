@@ -130,9 +130,63 @@ frontend/
     [x] Step 4 — Wire into Celery
     [x] Step 5 — GET /repos/{id}/graph endpoint
 [ ] Phase 5 — Frontend
+    [x] Step 1 — Design foundation & app shell
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-06-01 (Phase 5 Step 1 — Design foundation & app shell)
+Phase 5 (Frontend) started. Established the design system and app shell only —
+no feature data, no API calls (React Query provider lands next step).
+
+Design direction "Indigo Slate": dark-mode-first, minimal, Linear/Vercel
+developer-tool polish. Single electric-indigo (#6366F1) accent on a refined
+near-black slate base (#0B0D11); no gradients. Kept the already-installed
+Geist Sans + Geist Mono (Geist Mono for code/paths/citations) over swapping to
+Inter. Decided via the ui-ux-pro-max tooling + two user choices (accent:
+Electric Indigo; base: Refined slate).
+
+Design tokens — single source of truth: frontend/app/globals.css, as shadcn-
+style HSL CSS variables under .dark (canonical) + a light :root fallback so
+next-themes can toggle. frontend/tailwind.config.ts only references them via
+hsl(var(--token)) and never hardcodes colors; it also maps two extra semantic
+tokens beyond shadcn defaults — success (emerald, "indexed/completed") and
+warning (amber, graph danger zones) — exposed as bg-success/text-warning etc.
+Radius --radius: 0.625rem (10px); fontFamily.sans/mono wired to the Geist vars.
+frontend/DESIGN.md documents the palette, type/spacing scale, and points to
+globals.css as canonical.
+
+shadcn/ui set up non-interactively: pre-created frontend/components.json
+(new-york, cssVariables, baseColor slate, @/* aliases) and frontend/lib/utils.ts
+(cn helper), then added 12 base components into frontend/components/ui/: button,
+input, card, badge, skeleton, sonner, tooltip, scroll-area, tabs, slider,
+switch, dropdown-menu. Shadcn MCP server (.mcp.json) used to resolve the add
+command.
+
+App shell: frontend/components/providers.tsx (next-themes ThemeProvider,
+attribute=class, defaultTheme=dark, enableSystem=false; marked TODO where the
+Query provider goes next step). frontend/components/top-nav.tsx (minimal sticky
+nav: ContextCode wordmark with indigo Boxes mark + theme toggle, hairline
+border, backdrop blur). frontend/components/theme-toggle.tsx (dropdown + lucide
+sun/moon). frontend/app/layout.tsx rewritten: ContextCode metadata, <html
+className="dark" suppressHydrationWarning>, Geist localFont kept, wraps
+Providers + TopNav + <main> + sonner Toaster.
+
+Route skeleton (stubbed, no data): app/page.tsx (landing — eyebrow, big
+headline with indigo emphasis, disabled URL input + indigo CTA, 3 benefit
+cards), app/repo/[id]/page.tsx (workspace — reads params.id into a mono Badge,
+Tabs Chat/Graph each with a dashed empty-state Card), app/not-found.tsx (404
+boundary), app/error.tsx ("use client" error boundary with reset()).
+
+No unit tests this step — static presentational shell with no business logic
+(only the trivial shadcn cn() helper). Deliberate per the "logic-heavy code"
+rule. Verification: tsc --noEmit clean (TS strict), next lint clean, next build
+green (5 routes), dev server booted and rendered via Playwright — landing and
+/repo/[id] render correctly in dark indigo, tabs switch, zero console errors/
+hydration warnings.
+
+Next: Phase 5 Step 2 — React Query provider + wire real data (index, SSE
+status, chat, graph).
+
 ### 2026-05-31 (SSE EventSource compatibility verified)
 Verified GET /repos/{id}/status is compatible with the browser EventSource
 API. No code fix was needed — the endpoint already meets the contract:
