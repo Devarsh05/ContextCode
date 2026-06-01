@@ -131,9 +131,66 @@ frontend/
     [x] Step 5 — GET /repos/{id}/graph endpoint
 [ ] Phase 5 — Frontend
     [x] Step 1 — Design foundation & app shell
+    [x] Step 2 — Data layer (typed API client, query hooks, SSE)
 [ ] Phase 6 — Deploy
 
 ## Session Log
+### 2026-06-01 (Phase 5 Step 2 — Data layer)
+Built the frontend data layer — no UI. Fully typed against the generated
+OpenAPI types in frontend/types/api.d.ts; no request/response shapes are
+hand-written.
+
+frontend/lib/api/client.ts: apiFetch<T>(path, init) reads API_BASE_URL from
+NEXT_PUBLIC_API_BASE_URL (default http://localhost:8000, trailing slash
+stripped; exported so the SSE hook reuses it), sets JSON Content-Type/Accept
+headers (merging caller headers), parses and returns the typed body on 2xx
+(204/empty → undefined), and throws ApiError(status, statusText, detail) on
+non-2xx. detail is the best-effort-parsed JSON body (falls back to raw text,
+never throws while parsing the error body).
+
+frontend/lib/api/types.ts: thin aliases re-exporting components["schemas"][...]
+(IndexRequest/Response, ChatRequest/Response, CitationResponse, Graph*).
+frontend/lib/api/{repos,chat,graph}.ts: indexRepo(url, forceReindex=false) →
+POST /repos/index (maps url→repo_url), postChat(req) → POST /chat,
+getGraph(repoId, resolvedOnly=false) → GET /repos/{id}/graph?resolved_only=
+(URLSearchParams).
+
+TanStack Query v5 installed. frontend/components/providers.tsx: QueryClient
+created once via useState and wrapped in QueryClientProvider INSIDE the existing
+next-themes ThemeProvider (staleTime 30s, retry 1, refetchOnWindowFocus false).
+Replaces the Step 1 TODO placeholder.
+
+Hooks (frontend/hooks/): useIndexRepo() and useChat() (useMutation),
+useGraph(repoId, resolvedOnly) (useQuery, key ["graph", repoId, resolvedOnly],
+enabled when repoId truthy). useIndexingStatus(repoId) is a custom EventSource
+hook returning { status, progressPct, message, error, done }. It maps the
+backend SSE frame (status / progress_pct / current_stage / error_message, or a
+top-level error) — the stream is `unknown` in api.d.ts so a local
+IndexingStatusEvent type is declared in that one file. Treats BOTH "completed"
+and "failed" as terminal (verified against backend/app/api/repos.py), and
+closes the connection on terminal status, on a server error payload, on a
+transport error (onerror), and on unmount/ repoId change (via a ref, no state
+update after teardown).
+
+Tests (Vitest 4 + RTL + jsdom): added frontend/vitest.config.ts (jsdom, react
+plugin, setupFiles, @/ alias → __dirname), vitest.setup.ts (jest-dom matchers),
+and "test"/"test:run" scripts. Test files import vitest symbols explicitly (no
+globals) so tsconfig is untouched. lib/api/__tests__/client.test.ts covers the
+2xx parse path, the non-2xx ApiError path with parsed JSON detail, and the
+non-JSON error body falling back to raw text. hooks/__tests__/
+use-indexing-status.test.ts uses a fake EventSource (records instances + close
+spy) to assert: no connection when repoId is null, a running frame maps to the
+exposed shape, a completed frame sets done + closes, a server error payload
+sets error + done + closes, a transport error closes, and unmount closes
+(cleanup).
+
+Verification: tsc --noEmit clean (TS strict), npm run test:run → 9 passed,
+next lint clean, next build green (data layer tree-shaken — routes still static,
+no bundle change since hooks aren't imported yet).
+
+Next: Phase 5 Step 3 — wire these hooks into the feature UI (index form +
+progress, chat, graph).
+
 ### 2026-06-01 (Phase 5 Step 1 — Design foundation & app shell)
 Phase 5 (Frontend) started. Established the design system and app shell only —
 no feature data, no API calls (React Query provider lands next step).

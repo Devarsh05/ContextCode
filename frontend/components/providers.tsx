@@ -1,12 +1,28 @@
 "use client";
 
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 
 /**
- * App-wide client providers. Theme lives here now; the React Query provider
- * will be added alongside it in the next step (data layer).
+ * App-wide client providers: theme (next-themes) and the TanStack Query client.
+ * The QueryClient is created once per app instance via useState so it is not
+ * shared across requests / re-created on render.
  */
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
+
   return (
     <ThemeProvider
       attribute="class"
@@ -14,8 +30,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem={false}
       disableTransitionOnChange
     >
-      {/* TODO(next step): wrap children in QueryClientProvider here. */}
-      {children}
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }
