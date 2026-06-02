@@ -132,6 +132,7 @@ frontend/
 [ ] Phase 5 — Frontend
     [x] Step 1 — Design foundation & app shell
     [x] Step 2 — Data layer (typed API client, query hooks, SSE)
+    [x] Step 3 — Landing page (hero + wired GitHub-URL form)
 [ ] Phase 6 — Deploy
 
 ## Session Log
