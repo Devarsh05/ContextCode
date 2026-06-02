@@ -134,6 +134,7 @@ frontend/
     [x] Step 2 — Data layer (typed API client, query hooks, SSE)
     [x] Step 3 — Landing page (hero + wired GitHub-URL form)
     [x] Step 4 — Indexing progress (stepper + SSE, retry on failure)
+    [x] Step 5 — Chat tab (composer, bubbles, expandable citations)
 [ ] Phase 6 — Deploy
 
 ## Session Log

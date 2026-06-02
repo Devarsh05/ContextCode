@@ -10,6 +10,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { ChatPanel } from "@/components/repo/chat/chat-panel";
 
 function EmptyState({
   icon: Icon,
@@ -58,11 +59,7 @@ export function Workspace({ repoId }: { repoId: string }) {
         </TabsList>
 
         <TabsContent value="chat" className="mt-6">
-          <EmptyState
-            icon={MessagesSquare}
-            title="Chat is coming online"
-            body="Once this repo is indexed, ask questions and get answers grounded in its code."
-          />
+          <ChatPanel repoId={repoId} />
         </TabsContent>
 
         <TabsContent value="graph" className="mt-6">
