@@ -52,22 +52,39 @@ function byCentrality(a: GraphNodeResponse, b: GraphNodeResponse): number {
  * Edges survive only when BOTH endpoints are visible — which also drops
  * unresolved/third-party edges, since their `target_file` is null and null is
  * never a member of the visible set.
+ *
+ * When `hideIsolated` is set, nodes that no rendered edge touches are dropped.
+ * Isolation is judged against the rendered (top-N) edge set, so the filter
+ * composes with the slider: a file whose only neighbours fell outside the
+ * top-N reads as isolated here. Such nodes have no edges by definition, so
+ * removing them never changes the edge set.
  */
 export function selectVisibleGraph(
   nodes: GraphNodeResponse[],
   edges: GraphEdgeResponse[],
   n: number,
+  hideIsolated = false,
 ): VisibleGraph {
   const limit = Math.max(0, Math.floor(n));
-  const visible = [...nodes].sort(byCentrality).slice(0, limit);
+  const topNodes = [...nodes].sort(byCentrality).slice(0, limit);
 
-  const visiblePaths = new Set(visible.map((node) => node.file_path));
+  const visiblePaths = new Set(topNodes.map((node) => node.file_path));
   const keptEdges = edges.filter(
     (edge) =>
       edge.target_file !== null &&
       visiblePaths.has(edge.source_file) &&
       visiblePaths.has(edge.target_file),
   );
+
+  let visible = topNodes;
+  if (hideIsolated) {
+    const connected = new Set<string>();
+    for (const edge of keptEdges) {
+      connected.add(edge.source_file);
+      connected.add(edge.target_file as string);
+    }
+    visible = topNodes.filter((node) => connected.has(node.file_path));
+  }
 
   const maxImportedBy = visible.reduce(
     (max, node) => Math.max(max, node.imported_by_count),

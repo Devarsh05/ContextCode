@@ -27,18 +27,20 @@ const nodeTypes = { dep: DepNode };
 
 export function GraphPanel({ repoId }: { repoId: string }) {
   const [n, setN] = useState(DEFAULT_N);
-  const [resolvedOnly, setResolvedOnly] = useState(false);
+  const [hideIsolated, setHideIsolated] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
-  const query = useGraph(repoId, resolvedOnly);
+  const query = useGraph(repoId);
   const { data } = query;
 
-  // Recompute layout only when the data (which changes with resolvedOnly via
-  // the query key) or N changes — per the perf requirement.
+  // Recompute layout only when the data, N, or the isolated-node filter
+  // changes. "Hide isolated" is a pure client-side node filter — no refetch.
   const layout = useMemo(() => {
     if (!data) return { nodes: [], edges: [] };
-    return layoutGraph(selectVisibleGraph(data.nodes, data.edges, n));
-  }, [data, n]);
+    return layoutGraph(
+      selectVisibleGraph(data.nodes, data.edges, n, hideIsolated),
+    );
+  }, [data, n, hideIsolated]);
 
   const selectedNode = useMemo(
     () => data?.nodes.find((node) => node.file_path === selectedPath) ?? null,
@@ -96,9 +98,9 @@ export function GraphPanel({ repoId }: { repoId: string }) {
         n={n}
         total={data.node_count}
         visibleCount={layout.nodes.length}
-        resolvedOnly={resolvedOnly}
+        hideIsolated={hideIsolated}
         onNChange={setN}
-        onResolvedOnlyChange={setResolvedOnly}
+        onHideIsolatedChange={setHideIsolated}
       />
 
       <div className="flex h-[640px] gap-4">

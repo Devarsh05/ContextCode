@@ -99,6 +99,46 @@ describe("selectVisibleGraph", () => {
     const result = selectVisibleGraph(nodes, edges, 2);
     expect(result.edges).toEqual([edge("b.py", "a.py")]);
   });
+
+  it("keeps isolated nodes by default", () => {
+    // No edges at all → every node is isolated, but the filter is off.
+    const result = selectVisibleGraph(nodes, [], 4);
+    expect(result.nodes).toHaveLength(4);
+  });
+});
+
+describe("selectVisibleGraph — hideIsolated", () => {
+  const nodes = [node("hub.py", 3), node("leaf.py", 0), node("lonely.py", 0)];
+  const edges = [edge("leaf.py", "hub.py")];
+
+  it("drops nodes no rendered edge touches", () => {
+    const result = selectVisibleGraph(nodes, edges, 10, true);
+    expect(result.nodes.map((nd) => nd.file_path).sort()).toEqual([
+      "hub.py",
+      "leaf.py",
+    ]);
+  });
+
+  it("leaves the edge set unchanged (isolated nodes have no edges)", () => {
+    const off = selectVisibleGraph(nodes, edges, 10, false);
+    const on = selectVisibleGraph(nodes, edges, 10, true);
+    expect(on.edges).toEqual(off.edges);
+  });
+
+  it("composes with top-N: a node whose only neighbour fell outside top-N reads as isolated", () => {
+    // Top-2 by centrality = hub.py(3), leaf2.py(2). hub's only importer
+    // leaf.py(0) is outside the top-2, so within the rendered edge set hub has
+    // no edge — and so does leaf2 — leaving nothing once isolated nodes drop.
+    const ns = [node("hub.py", 3), node("leaf2.py", 2), node("leaf.py", 0)];
+    const es = [edge("leaf.py", "hub.py")];
+    const result = selectVisibleGraph(ns, es, 2, true);
+    expect(result.edges).toEqual([]);
+    expect(result.nodes).toEqual([]);
+  });
+
+  it("reports max fan-in over the filtered visible set", () => {
+    expect(selectVisibleGraph(nodes, edges, 10, true).maxImportedBy).toBe(3);
+  });
 });
 
 describe("nodeEdges", () => {

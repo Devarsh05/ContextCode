@@ -8,9 +8,9 @@ interface GraphControlsProps {
   /** Total nodes available (caps the slider). */
   total: number;
   visibleCount: number;
-  resolvedOnly: boolean;
+  hideIsolated: boolean;
   onNChange: (n: number) => void;
-  onResolvedOnlyChange: (resolvedOnly: boolean) => void;
+  onHideIsolatedChange: (hideIsolated: boolean) => void;
 }
 
 const MIN_N = 10;
@@ -22,9 +22,9 @@ export function GraphControls({
   n,
   total,
   visibleCount,
-  resolvedOnly,
+  hideIsolated,
   onNChange,
-  onResolvedOnlyChange,
+  onHideIsolatedChange,
 }: GraphControlsProps) {
   const max = Math.max(MIN_N, Math.min(MAX_N, total));
 
@@ -52,11 +52,11 @@ export function GraphControls({
 
       <label className="flex cursor-pointer items-center gap-2 text-xs">
         <Switch
-          checked={resolvedOnly}
-          onCheckedChange={onResolvedOnlyChange}
-          aria-label="Resolved imports only"
+          checked={hideIsolated}
+          onCheckedChange={onHideIsolatedChange}
+          aria-label="Hide isolated files"
         />
-        <span className="font-medium">Resolved imports only</span>
+        <span className="font-medium">Hide isolated files</span>
       </label>
     </div>
   );
