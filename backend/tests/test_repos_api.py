@@ -138,6 +138,35 @@ async def test_no_force_reindex_returns_completed_without_queuing(async_client, 
     mock_task.delay.assert_not_called()
 
 
+# ── GET /repos/{repo_id} ─────────────────────────────────────────────────────
+
+async def test_get_repo_returns_repo(async_client, db_session):
+    repo = Repository(
+        url="https://github.com/owner/get-test",
+        name="get-test",
+        status="completed",
+        file_count=42,
+    )
+    db_session.add(repo)
+    await db_session.commit()
+
+    response = await async_client.get(f"/repos/{repo.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["repo_id"] == str(repo.id)
+    assert data["url"] == "https://github.com/owner/get-test"
+    assert data["name"] == "get-test"
+    assert data["status"] == "completed"
+    assert data["file_count"] == 42
+
+
+async def test_get_repo_unknown_returns_404(async_client):
+    response = await async_client.get(f"/repos/{uuid.uuid4()}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Repository not found"
+
+
 # ── GET /repos/{repo_id}/status (SSE) ────────────────────────────────────────
 
 async def test_status_sse_unknown_repo_returns_404(async_client):

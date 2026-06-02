@@ -14,6 +14,14 @@ class IndexResponse(BaseModel):
     status: str
 
 
+class RepoResponse(BaseModel):
+    repo_id: UUID
+    url: str
+    name: str
+    status: str
+    file_count: int | None = None
+
+
 class CitationResponse(BaseModel):
     file_path: str
     function_name: str

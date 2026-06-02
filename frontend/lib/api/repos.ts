@@ -1,5 +1,9 @@
 import { apiFetch } from "@/lib/api/client";
-import type { IndexRequest, IndexResponse } from "@/lib/api/types";
+import type {
+  IndexRequest,
+  IndexResponse,
+  RepoResponse,
+} from "@/lib/api/types";
 
 /**
  * Queue indexing for a public GitHub repo. Returns immediately with the repo
@@ -14,4 +18,9 @@ export function indexRepo(
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+/** Fetch a repo's metadata (url, name, status, file_count) by id. */
+export function getRepo(repoId: string): Promise<RepoResponse> {
+  return apiFetch<RepoResponse>(`/repos/${repoId}`);
 }

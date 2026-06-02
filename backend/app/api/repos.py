@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.schemas import IndexRequest, IndexResponse
+from app.api.schemas import IndexRequest, IndexResponse, RepoResponse
 from app.models.code_chunk import CodeChunk
 from app.models.database import get_db
 from app.models.indexing_job import IndexingJob
@@ -69,6 +69,24 @@ async def start_indexing(
     index_repository.delay(body.repo_url, str(job.id), str(repo.id))
 
     return IndexResponse(repo_id=repo.id, job_id=job.id, status="queued")
+
+
+@router.get("/{repo_id}", response_model=RepoResponse)
+async def get_repo(
+    repo_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> RepoResponse:
+    result = await db.execute(select(Repository).where(Repository.id == repo_id))
+    repo = result.scalar_one_or_none()
+    if repo is None:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    return RepoResponse(
+        repo_id=repo.id,
+        url=repo.url,
+        name=repo.name,
+        status=repo.status,
+        file_count=repo.file_count,
+    )
 
 
 @router.get("/{repo_id}/status")
