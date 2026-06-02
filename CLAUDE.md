@@ -135,6 +135,7 @@ frontend/
     [x] Step 3 — Landing page (hero + wired GitHub-URL form)
     [x] Step 4 — Indexing progress (stepper + SSE, retry on failure)
     [x] Step 5 — Chat tab (composer, bubbles, expandable citations)
+    [x] Step 6 — Dependency graph tab (React Flow + dagre, danger zones)
 [ ] Phase 6 — Deploy
 
 ## Session Log

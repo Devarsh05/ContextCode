@@ -3,7 +3,6 @@
 import { MessagesSquare, Network } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Tabs,
   TabsContent,
@@ -11,30 +10,11 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { ChatPanel } from "@/components/repo/chat/chat-panel";
-
-function EmptyState({
-  icon: Icon,
-  title,
-  body,
-}: {
-  icon: typeof Network;
-  title: string;
-  body: string;
-}) {
-  return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-        <Icon className="size-7 text-muted-foreground" />
-        <p className="text-sm font-medium">{title}</p>
-        <p className="max-w-sm text-sm text-muted-foreground">{body}</p>
-      </CardContent>
-    </Card>
-  );
-}
+import { GraphPanel } from "@/components/repo/graph/graph-panel";
 
 /**
- * The indexed-repo workspace: Chat and Graph tabs. These render empty states
- * until Steps 5 and 6 wire up the chat and dependency-graph views.
+ * The indexed-repo workspace: a Chat tab (RAG Q&A) and a Graph tab (dependency
+ * visualization with danger-zone analysis).
  */
 export function Workspace({ repoId }: { repoId: string }) {
   return (
@@ -63,11 +43,7 @@ export function Workspace({ repoId }: { repoId: string }) {
         </TabsContent>
 
         <TabsContent value="graph" className="mt-6">
-          <EmptyState
-            icon={Network}
-            title="Dependency graph is coming online"
-            body="A visual map of file dependencies with danger-zone analysis will render here."
-          />
+          <GraphPanel repoId={repoId} />
         </TabsContent>
       </Tabs>
     </div>
