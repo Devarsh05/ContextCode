@@ -2,6 +2,177 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-02 (Phase 5 Step 6 — Dependency graph)
+Dependency graph tab. Packages added: reactflow, dagre, @types/dagre.
+
+`frontend/lib/graph/select.ts`: pure graph-shaping module. `CentralityTier` (0–4 type).
+`centralityTier(count, maxCount)` maps fan-in to a 5-step danger scale relative to the
+most-imported node in the visible set (ratio ≤0.25 → tier 1, ≤0.5 → 2, ≤0.75 → 3, >0.75 →
+4; 0 fan-in or zero max → tier 0). `selectVisibleGraph(nodes, edges, n, hideIsolated)`:
+sorts nodes by imported_by_count desc (file_path tie-break), slices the top-N, retains edges
+whose both endpoints are in the visible set — this also silently drops null-target edges
+(unresolved/third-party imports can never satisfy the membership test). `hideIsolated` then
+removes nodes not touched by any kept edge; the filter composes with top-N so a node whose
+only neighbour fell outside the slider reads as isolated. `nodeEdges(filePath, allEdges)`
+partitions the full (not just visible) edge list for the detail panel.
+
+`frontend/lib/graph/tiers.ts`: `TIERS` record keyed by CentralityTier — peripheral (muted
+slate 150×48px) → low (dim indigo, 168×52) → moderate (brighter indigo, 188×58) → high
+(amber warning token, 212×64) → critical (red destructive, 240×72, glow box-shadow ring).
+Size and colour both encode centrality to avoid relying on colour alone.
+
+`frontend/lib/graph/layout.ts`: `layoutGraph(visible)` runs dagre LR (A→B = A imports B,
+dependencies flow rightward into high-fan-in nodes). Converts dagre centre coordinates to
+React Flow top-left positions. Edges styled muted-slate with ArrowClosed markers.
+
+`frontend/components/repo/graph/dep-node.tsx`: custom React Flow node (type "dep") reading
+`DepNodeData` (node + tier). `frontend/components/repo/graph/graph-controls.tsx`: top-N
+slider (1–total) + "Hide isolated files" switch + visible-count label.
+`frontend/components/repo/graph/graph-legend.tsx`: 5-tier colour/size legend.
+`frontend/components/repo/graph/graph-panel.tsx`: loading skeletons, error Card with Retry,
+empty-graph state, ReactFlow canvas with Background + Controls (fitView, DEFAULT_N=60,
+proOptions.hideAttribution). GraphLegend pinned bottom-left behind backdrop-blur. Node click
+toggles `selectedPath` (second click deselects); pane click clears. NodeDetailPanel rendered
+in a 320 px side column when a node is selected. `frontend/components/repo/graph/
+node-detail-panel.tsx`: file metadata (path, language, import/imported_by counts, tier),
+incoming/outgoing edge lists drawn from the full edge set so neighbours outside top-N still
+appear.
+
+The original resolvedOnly switch was repurposed to "Hide isolated files" because
+`resolved_only=true` had no visible effect — unresolved edges already carry `target_file=null`
+and are implicitly dropped by `selectVisibleGraph` before any node is drawn. The API-level
+filter changed the edge count but produced an identical canvas.
+
+BUG: graph build was silently failing in Celery with a Postgres `NotNullViolation` on
+`file_dependencies.target_file`. Root cause: the initial `a8e3f1c92d74` migration created the
+column NOT NULL; the `d3b7e2f10a95` follow-up migration (Phase 4 Step 1) relaxed it, but a
+dev DB that only applied the original migration retained the NOT NULL constraint. SQLite-based
+tests build schema from `Base.metadata.create_all`, inherit ORM nullability, and can never
+catch migration/DB drift. Fix: `backend/tests/migrations/test_target_file_nullable.py` added
+as a regression guard — creates a throwaway Postgres DB, runs `alembic upgrade head`, and
+inserts a `target_file=None` FileDependency row; a future migration that re-introduces NOT
+NULL fails here, not in production. Test skips when DATABASE_URL is absent or non-Postgres.
+
+`frontend/lib/graph/__tests__/select.test.ts`: 18 tests across centralityTier thresholds
+(including boundary conditions), selectVisibleGraph top-N ordering and tie-breaking, edge
+endpoint filtering, null-target-file drop, hide-isolated composition with top-N, and
+nodeEdges incoming/outgoing partitioning.
+
+Verification: tsc --noEmit clean, 18 select tests pass, migration regression test passes
+against Postgres, next build green. Re-indexing confirmed graph renders and danger zones
+display correctly.
+
+Next: Phase 6 — Deploy (Vercel frontend, Railway backend).
+
+### 2026-06-02 (Phase 5 Step 5 — Chat)
+Chat tab built and tested. No backend changes.
+
+`frontend/components/repo/chat/types.ts`: `ChatMessage` discriminated union — `user` role
+(content: string) and `assistant` role (answer, citations array, optional isError flag).
+
+`frontend/components/repo/chat/chat-panel.tsx`: messages in local component state only (no
+persistence — multi-user/auth is out of scope). Empty state: centered MessagesSquare icon,
+help text, 3 starter suggestion chips as pill buttons. Each submission appends a user message
+then calls `chat.mutate({ repo_id, question })`; `onSuccess` appends the assistant turn;
+`onError` appends an `isError` assistant bubble carrying the error string. While pending
+`<ChatThinking>` is appended. `useEffect` on `[messages.length, chat.isPending]` calls
+`bottomRef.current.scrollIntoView({ behavior: "smooth" })`.
+
+`frontend/components/repo/chat/chat-message.tsx`: user bubbles right-aligned (primary bg);
+assistant bubbles left-aligned (card bg, border). `isError` flips to destructive styling
+with an AlertTriangle prefix. Citation block rendered only when `citations.length > 0` — a
+zero-citation refusal answer shows no citation header, covering the clean empty-citation
+case.
+
+`frontend/components/repo/chat/chat-thinking.tsx`: three bouncing dots at 0/150/300 ms
+`animationDelay`, `aria-live="polite"` for screen readers.
+
+`frontend/components/repo/chat/chat-composer.tsx`: auto-growing Textarea (capped at 200 px
+via `useEffect` on value resetting `el.style.height`). Enter submits; Shift+Enter inserts a
+newline. Send button disabled when value is blank or pending. `aria-label="Ask a question
+about this codebase"`.
+
+`frontend/components/repo/chat/citation-card.tsx`: expandable citation. Collapsed header:
+`formatCitationRange(citation)` (file_path:start-end; single-line collapses to file_path:line),
+optional function_name in muted mono, chunk_type Badge. Clicking reveals a `<pre>` snippet
+(max-h-72, font-mono, overflow-auto) via ChevronDown toggle with `aria-expanded`.
+
+`frontend/lib/citations.ts`: `formatCitationRange()` pure helper.
+`frontend/lib/citations.test.ts`: 3 tests (multi-line range, single-line collapse, path
+preserved verbatim).
+
+`frontend/components/repo/chat/__tests__/chat-panel.test.tsx`: 4 tests (Vitest + RTL +
+mocked `postChat`): user message appears, answer + citation renders, empty-citation response
+shows no citation block, thinking indicator appears while pending then clears on resolution,
+error bubble on network failure.
+
+Verification: tsc --noEmit clean, 4 chat-panel + 3 citations tests pass, next build green.
+
+Next: Phase 5 Step 6 — dependency graph tab.
+
+### 2026-06-02 (Phase 5 Step 4 — Indexing progress)
+Indexing progress view. Added a backend GET /repos/{id} endpoint so the progress page can
+read the repo URL (needed for Retry) and bootstrap status on cold load.
+
+Backend: `GET /repos/{repo_id}` added to `app/api/repos.py` — validates UUID path param,
+returns `RepoResponse` (repo_id, url, name, status, file_count), 404 on unknown.
+`RepoResponse` added to `app/api/schemas.py`. 2 new tests in `backend/tests/test_repos_api.py`
+(200 full shape, 404 detail). `frontend/types/api.d.ts` regenerated to expose `RepoResponse`.
+
+Frontend: `frontend/lib/api/repos.ts` gains `getRepo(repoId)` calling the new endpoint.
+`frontend/lib/api/types.ts` adds `RepoResponse` alias. `frontend/hooks/use-repo.ts`:
+`useRepo(repoId)` TanStack Query hook, enabled when repoId is truthy.
+
+`frontend/lib/indexing-stages.ts`: pure module mapping 7 backend `current_stage` keys
+(cloning / walking / parsing / persisting / embedding / storing / building_graph) to
+human-readable labels. `resolveStageIndex(status, currentStage, prevIndex)` is monotonic —
+returns `prevIndex` when stage is unknown/null while still running, so the stepper never
+snaps backwards between SSE frames. `frontend/lib/indexing-stages.test.ts`: 8 tests.
+
+`frontend/components/repo/indexing-progress.tsx`: Card with an indeterminate animated bar
+(`animate-indeterminate` keyframe added to tailwind.config.ts) while `progressPct` is null,
+transitioning to shadcn `<Progress value={pct}>` once the backend provides a numeric value.
+7-stage stepper: Check/emerald (done), spinning Loader2/primary (active), dimmed dot
+(pending). `useRef(lastIndexRef)` holds last known stage index so renders never regress.
+
+`frontend/components/repo/indexing-error.tsx`: destructive Card showing the error message;
+"Retry indexing" button (disabled until canRetry + not retrying) and "Start over" link to /.
+
+`frontend/components/repo/repo-view.tsx`: `RepoView` wraps `RepoViewInner` with a
+`retryNonce` key — incrementing it remounts the inner tree and reopens the SSE connection.
+`RepoViewInner` consumes `useRepo` + `useIndexingStatus`; live SSE `status` wins over
+`repo.data?.status`. Retry calls `indexRepo({ url, forceReindex: true })`, invalidates
+`["repo", repoId]`, and increments `retryNonce`. Initial-loading spinner for the brief
+window before the first repo fetch and SSE frame arrive. Transitions to `<Workspace>` on
+completed; to `<IndexingError>` on failed or repo-not-found.
+
+Verification: tsc --noEmit clean, 8 indexing-stages tests pass, 2 new backend tests pass,
+next build green.
+
+Next: Phase 5 Step 5 — chat tab.
+
+### 2026-06-02 (Phase 5 Step 3 — Landing page)
+Landing page wired to the indexing backend. No backend changes.
+
+`frontend/components/repo-url-form.tsx` (client component): `isGithubRepoUrl(value)` pure
+validator — trims, prepends `https://` if no protocol (so `github.com/owner/repo` passes),
+feeds `new URL()`, checks hostname is github.com or www.github.com, checks path has ≥ 2
+non-empty segments. Only validation uses the normalised form; the raw trimmed string is what
+`indexRepo({ url: value })` sends to the backend. `useIndexRepo` mutation: `onSuccess` →
+`router.push(/repo/{repo_id})`; `onError` → sonner toast with the error message. `isPending`
+disables input and button (Loader2 + "Analyzing" label replaces ArrowRight + "Analyze").
+
+`frontend/app/page.tsx` remains a server component: eyebrow pill badge, `<h1>` with
+`text-primary` emphasis span, subtitle paragraph, `<RepoUrlForm />` client island, caption
+noting "Public repos · Python, JavaScript & TypeScript", three benefit cards (MessagesSquare /
+Network / GitBranch, each with title + body) in a responsive 3-column grid. 21st.dev Magic
+MCP produced no usable output; the hero was hand-built against the Step-1 Indigo Slate tokens.
+
+Verification: no new tests (pure validator has no stateful logic); tsc --noEmit clean,
+next lint clean, next build green.
+
+Next: Phase 5 Step 4 — indexing progress experience.
+
 ### 2026-06-01 (Phase 5 Step 2 — Data layer)
 Built the frontend data layer — no UI. Fully typed against the generated
 OpenAPI types in frontend/types/api.d.ts; no request/response shapes are
