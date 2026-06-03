@@ -2,6 +2,52 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-03 (Phase 5 Step 7 — Polish + E2E) — Phase 5 COMPLETE
+Polish pass over the four surfaces (landing, progress, chat, graph). No data-layer
+or feature changes; only existing Indigo Slate tokens, no new hex.
+
+Progress: replaced the bare initial-load spinner in `repo-view.tsx` with
+`indexing-progress-skeleton.tsx` — a Card mirroring `IndexingProgress`'s shape
+(title/description lines, progress bar, one row per `STAGES` entry) so the swap to
+the live stepper causes no layout shift. `IndexingError` gained an optional `title`
+prop; `repo-view` now passes "Repository not found" (vs "Indexing failed") when
+`repo.isError`, and that message wins over a transient SSE "connection lost" error.
+EventSource cleanup on unmount/terminal/error was already correct — verified.
+
+Chat: inline error turns now carry the originating `question` (added to
+`AssistantMessage`) and render a ghost "Retry" button (chat-message.tsx). chat-panel
+factored send into `ask(question, { withUserBubble })`; retry drops the failed turn
+by id and re-asks without a duplicate user bubble. Focus rings added to empty-state
+suggestion buttons. Thinking state + empty-citation handling untouched.
+
+Graph: canvas row is now `flex-col lg:flex-row` with an explicit responsive height
+(`h-[60vh] min-h-[420px] lg:h-[640px]`) on both the canvas and the loading skeleton,
+and the detail panel is `w-full lg:w-80` — React Flow keeps a defined height and
+stays pannable/zoomable on mobile instead of collapsing under the side panel.
+
+Landing: already handled an unreachable backend via the mutation `onError` toast —
+verified, no change.
+
+Testing: added `@playwright/test` + `playwright.config.ts` (Chromium, webServer
+`npm run dev`) and `e2e/happy-path.spec.ts`. All backend calls intercepted via
+`page.route` — including a scripted `text/event-stream` body for the SSE status
+endpoint (in-progress then `completed` frame). The graph route uses a RegExp so it
+matches the `?resolved_only=` query string. Flow: enter URL → progress streams to
+completion → workspace → send chat message → answer + citation visible → Graph tab →
+node visible. `test:e2e` script added; vitest `exclude` gained `e2e`; test-results /
+playwright-report gitignored.
+
+Verification: tsc --noEmit clean, next lint clean, next build green (`/repo/[id]`
+221 kB First Load JS, dominated by React Flow/dagre — no balloon), Playwright E2E
+passes, 42 vitest tests green, hex grep over app/ + components/ empty.
+
+Phase 5 summary: a complete dark-mode-first Next.js 14 frontend over the FastAPI
+backend — design foundation + app shell (Step 1), typed API client + query hooks +
+SSE (Step 2), landing hero/form (Step 3), indexing progress stepper (Step 4), RAG
+chat with expandable citations (Step 5), React Flow dependency graph with danger
+zones (Step 6), and this polish/states/responsive/a11y pass with a deterministic
+mocked E2E (Step 7). Next: Phase 6 — Deploy (Vercel frontend, Railway backend).
+
 ### 2026-06-02 (Phase 5 Step 6 — Dependency graph)
 Dependency graph tab. Packages added: reactflow, dagre, @types/dagre.
 

@@ -1,11 +1,18 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, RotateCw } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { CitationCard } from "@/components/repo/chat/citation-card";
 import type { ChatMessage } from "@/components/repo/chat/types";
 
+interface ChatMessageItemProps {
+  message: ChatMessage;
+  /** Re-attempt a failed assistant turn. Only set for error messages. */
+  onRetry?: () => void;
+}
+
 /** A single chat turn: a user prompt or an assistant answer with citations. */
-export function ChatMessageItem({ message }: { message: ChatMessage }) {
+export function ChatMessageItem({ message, onRetry }: ChatMessageItemProps) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -34,6 +41,18 @@ export function ChatMessageItem({ message }: { message: ChatMessage }) {
             </span>
           )}
           <p className="whitespace-pre-wrap leading-relaxed">{message.answer}</p>
+          {message.isError && onRetry && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRetry}
+              className="mt-2 h-7 gap-1.5 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <RotateCw className="size-3.5" />
+              Retry
+            </Button>
+          )}
         </div>
 
         {message.citations.length > 0 && (

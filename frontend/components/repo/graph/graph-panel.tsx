@@ -51,7 +51,7 @@ export function GraphPanel({ repoId }: { repoId: string }) {
     return (
       <div className="flex flex-col gap-4">
         <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-[600px] w-full" />
+        <Skeleton className="h-[60vh] min-h-[420px] w-full lg:h-[640px]" />
       </div>
     );
   }
@@ -103,8 +103,8 @@ export function GraphPanel({ repoId }: { repoId: string }) {
         onHideIsolatedChange={setHideIsolated}
       />
 
-      <div className="flex h-[640px] gap-4">
-        <div className="relative flex-1 overflow-hidden rounded-lg border border-border bg-background">
+      <div className="flex flex-col gap-4 lg:flex-row">
+        <div className="relative h-[60vh] min-h-[420px] flex-1 overflow-hidden rounded-lg border border-border bg-background lg:h-[640px]">
           <ReactFlow
             nodes={layout.nodes}
             edges={layout.edges}
@@ -127,7 +127,7 @@ export function GraphPanel({ repoId }: { repoId: string }) {
         </div>
 
         {selectedNode && (
-          <div className="w-80 shrink-0">
+          <div className="w-full lg:w-80 lg:shrink-0">
             <NodeDetailPanel
               node={selectedNode}
               allEdges={data.edges}

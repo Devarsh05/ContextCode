@@ -129,13 +129,14 @@ frontend/
     [x] Step 3 — Graph builder service
     [x] Step 4 — Wire into Celery
     [x] Step 5 — GET /repos/{id}/graph endpoint
-[ ] Phase 5 — Frontend
+[x] Phase 5 — Frontend
     [x] Step 1 — Design foundation & app shell
     [x] Step 2 — Data layer (typed API client, query hooks, SSE)
     [x] Step 3 — Landing page (hero + wired GitHub-URL form)
     [x] Step 4 — Indexing progress (stepper + SSE, retry on failure)
     [x] Step 5 — Chat tab (composer, bubbles, expandable citations)
     [x] Step 6 — Dependency graph tab (React Flow + dagre, danger zones)
+    [x] Step 7 — Polish: loading/empty/error states, responsive/a11y, Playwright E2E
 [ ] Phase 6 — Deploy
 
 ## Session Log

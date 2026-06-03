@@ -13,6 +13,8 @@ export interface AssistantMessage {
   citations: CitationResponse[];
   /** True when the answer is a client-side error notice, not a model reply. */
   isError?: boolean;
+  /** The question that produced this error, so the turn can be retried. */
+  question?: string;
 }
 
 export type ChatMessage = UserMessage | AssistantMessage;

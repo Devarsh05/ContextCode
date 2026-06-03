@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useIndexRepo } from "@/hooks/use-index-repo";
@@ -10,6 +9,7 @@ import { useIndexingStatus } from "@/hooks/use-indexing-status";
 import { useRepo } from "@/hooks/use-repo";
 import { IndexingError } from "@/components/repo/indexing-error";
 import { IndexingProgress } from "@/components/repo/indexing-progress";
+import { IndexingProgressSkeleton } from "@/components/repo/indexing-progress-skeleton";
 import { Workspace } from "@/components/repo/workspace";
 
 /**
@@ -82,6 +82,7 @@ function RepoViewInner({
       : (status.error ?? "Indexing failed for this repository.");
     return (
       <IndexingError
+        title={repoNotFound ? "Repository not found" : "Indexing failed"}
         message={message}
         canRetry={Boolean(repo.data?.url) && !repoNotFound}
         isRetrying={indexRepo.isPending}
@@ -91,11 +92,7 @@ function RepoViewInner({
   }
 
   if (isInitialLoading) {
-    return (
-      <div className="container flex animate-fade-in items-center justify-center px-6 py-32">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <IndexingProgressSkeleton />;
   }
 
   return <IndexingProgress status={status} />;

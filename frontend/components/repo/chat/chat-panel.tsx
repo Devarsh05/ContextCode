@@ -34,11 +34,18 @@ export function ChatPanel({ repoId }: { repoId: string }) {
     return String((idRef.current += 1));
   }
 
-  function handleSubmit(question: string) {
-    setMessages((prev) => [
-      ...prev,
-      { id: nextId(), role: "user", content: question },
-    ]);
+  /**
+   * Send a question to the model. `withUserBubble` is false when retrying a
+   * failed turn — the user prompt is already in the thread, so we only append
+   * the new assistant reply.
+   */
+  function ask(question: string, { withUserBubble = true } = {}) {
+    if (withUserBubble) {
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: "user", content: question },
+      ]);
+    }
 
     chat.mutate(
       { repo_id: repoId, question },
@@ -63,10 +70,21 @@ export function ChatPanel({ repoId }: { repoId: string }) {
                 error.message || "The request failed. Please try again.",
               citations: [],
               isError: true,
+              question,
             },
           ]),
       },
     );
+  }
+
+  function handleSubmit(question: string) {
+    ask(question);
+  }
+
+  /** Drop the failed error turn and re-ask its question (no new user bubble). */
+  function handleRetry(errorId: string, question: string) {
+    setMessages((prev) => prev.filter((message) => message.id !== errorId));
+    ask(question, { withUserBubble: false });
   }
 
   const isEmpty = messages.length === 0 && !chat.isPending;
@@ -89,7 +107,7 @@ export function ChatPanel({ repoId }: { repoId: string }) {
                   key={suggestion}
                   type="button"
                   onClick={() => handleSubmit(suggestion)}
-                  className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   {suggestion}
                 </button>
@@ -99,7 +117,17 @@ export function ChatPanel({ repoId }: { repoId: string }) {
         ) : (
           <div className="space-y-4 py-1">
             {messages.map((message) => (
-              <ChatMessageItem key={message.id} message={message} />
+              <ChatMessageItem
+                key={message.id}
+                message={message}
+                onRetry={
+                  message.role === "assistant" &&
+                  message.isError &&
+                  message.question
+                    ? () => handleRetry(message.id, message.question!)
+                    : undefined
+                }
+              />
             ))}
             {chat.isPending && <ChatThinking />}
             <div ref={bottomRef} />

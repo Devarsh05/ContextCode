@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/card";
 
 interface IndexingErrorProps {
+  /** Heading for the failure card; defaults to the indexing-failure wording. */
+  title?: string;
   message: string;
   /** Whether a force re-index can be triggered (requires the repo URL). */
   canRetry: boolean;
@@ -22,6 +24,7 @@ interface IndexingErrorProps {
 
 /** Failure state for indexing: shows the error and a force-reindex Retry. */
 export function IndexingError({
+  title = "Indexing failed",
   message,
   canRetry,
   isRetrying,
@@ -33,7 +36,7 @@ export function IndexingError({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base text-destructive">
             <AlertTriangle className="size-4" />
-            Indexing failed
+            {title}
           </CardTitle>
           <CardDescription>{message}</CardDescription>
         </CardHeader>
