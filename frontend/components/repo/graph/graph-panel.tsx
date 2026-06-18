@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Network } from "lucide-react";
 import ReactFlow, {
   Background,
   Controls,
+  ReactFlowProvider,
+  useReactFlow,
+  type Edge,
+  type Node,
   type NodeMouseHandler,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -24,6 +28,70 @@ const DEFAULT_N = 60;
 
 // Defined at module scope so React Flow doesn't warn about a new object each render.
 const nodeTypes = { dep: DepNode };
+
+/**
+ * The React Flow canvas. Split out so it can live inside a <ReactFlowProvider>
+ * and use the `useReactFlow()` hook. A ResizeObserver on the container refits
+ * the viewport whenever its dimensions change — this keeps the graph framed
+ * when crossing the mobile/desktop breakpoint (the layout switches between a
+ * full-width column and a `lg:flex-row` with the side panel), where an initial
+ * fitView would otherwise leave the nodes scrolled out of the visible area.
+ */
+function GraphCanvas({
+  nodes,
+  edges,
+  onNodeClick,
+  onPaneClick,
+}: {
+  nodes: Node[];
+  edges: Edge[];
+  onNodeClick: NodeMouseHandler;
+  onPaneClick: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver(() => {
+      fitView();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fitView]);
+
+  return (
+    <div
+      ref={containerRef}
+      // `lg:flex-1` — NOT bare `flex-1`. The canvas row is `flex-col` below `lg`,
+      // so a vertical flex item with `flex-basis: 0%` would override `h-[60vh]`
+      // and leave the height flex-derived/indefinite; React Flow's
+      // `.react-flow { height: 100% }` then resolves to 0 and the canvas
+      // collapses on mobile. Scoping flex to `lg` (where the layout is
+      // `flex-row` and flex governs width) keeps `h-[60vh]` definite on mobile.
+      className="relative h-[60vh] min-h-[420px] overflow-hidden rounded-lg border border-border bg-background lg:h-[640px] lg:flex-1"
+    >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
+        fitView
+        minZoom={0.1}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background color="hsl(220 16% 18%)" gap={20} />
+        <Controls position="top-left" className="!border-border !bg-card" />
+      </ReactFlow>
+      <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-md bg-card/80 px-3 py-2 backdrop-blur">
+        <GraphLegend />
+      </div>
+    </div>
+  );
+}
 
 export function GraphPanel({ repoId }: { repoId: string }) {
   const [n, setN] = useState(DEFAULT_N);
@@ -104,27 +172,14 @@ export function GraphPanel({ repoId }: { repoId: string }) {
       />
 
       <div className="flex flex-col gap-4 lg:flex-row">
-        <div className="relative h-[60vh] min-h-[420px] flex-1 overflow-hidden rounded-lg border border-border bg-background lg:h-[640px]">
-          <ReactFlow
+        <ReactFlowProvider>
+          <GraphCanvas
             nodes={layout.nodes}
             edges={layout.edges}
-            nodeTypes={nodeTypes}
             onNodeClick={handleNodeClick}
             onPaneClick={() => setSelectedPath(null)}
-            fitView
-            minZoom={0.1}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background color="hsl(220 16% 18%)" gap={20} />
-            <Controls
-              position="top-left"
-              className="!border-border !bg-card"
-            />
-          </ReactFlow>
-          <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-md bg-card/80 px-3 py-2 backdrop-blur">
-            <GraphLegend />
-          </div>
-        </div>
+          />
+        </ReactFlowProvider>
 
         {selectedNode && (
           <div className="w-full lg:w-80 lg:shrink-0">

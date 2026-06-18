@@ -2,6 +2,51 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-17 (Phase 5 QA — Mobile graph zero-height collapse)
+Final QA fix for the dependency-graph tab at 375px. Reported symptom: graph
+canvas a black empty box with no nodes, controls/legend rendering fine above and
+below.
+
+Root cause (found by Playwright DOM instrumentation, not by reading CSS — the
+first read led to a wrong conclusion that is worth recording). The ReactFlow
+wrapper div in `components/repo/graph/graph-panel.tsx` carried
+`h-[60vh] min-h-[420px] flex-1 ... lg:h-[640px]`. The wrapper itself measured
+418px tall on mobile, but its child `.react-flow` measured `height: 0px`. React
+Flow's base CSS is `.react-flow { height: 100% }`, which only resolves against a
+parent with a *definite* height. The canvas row is `flex-col` below `lg`, so the
+wrapper is a vertical flex item; its `flex-1` (`flex: 1 1 0%`) makes flex-basis
+govern the *main (vertical)* axis, overriding `h-[60vh]` and leaving the wrapper's
+height flex-derived/indefinite for percentage resolution. So `height: 100%` fell
+back to auto → content height → 0 (React Flow's inner panes are absolutely
+positioned). On desktop the row is `lg:flex-row`, so flex-basis governs *width*
+and height comes from the explicit `lg:h-[640px]` (definite) — which is exactly
+why desktop always worked and mobile collapsed. `toBeVisible()` did not catch it:
+the node stayed in the DOM with a bounding box, just clipped outside the 0px pane.
+
+Fix: scoped flex to the breakpoint where the row layout actually exists —
+`flex-1` → `lg:flex-1`. Below `lg` the wrapper is a normal block item and
+`h-[60vh]` is a definite height, so `.react-flow` resolves to ~418px and the graph
+renders. (The task's literal `md:flex-1` was rejected: the layout stays `flex-col`
+through the md→lg range, so `md:flex-1` would reintroduce the collapse on tablets;
+`lg:flex-1` matches the `lg:flex-row` switch.)
+
+Also added fitView-on-resize: extracted the canvas into an inner `GraphCanvas`
+wrapped in `<ReactFlowProvider>` so it can use `useReactFlow()`; a `ResizeObserver`
+on the container ref calls `fitView()` on every dimension change, re-framing the
+graph when crossing the mobile↔desktop breakpoint (canvas height goes 60vh ↔
+640px and the 320px detail panel joins/leaves the row). No changes to node colors,
+danger-zone tiers, controls, legend, or selection logic.
+
+Regression test: `e2e/graph-mobile.spec.ts` (mocked backend, 375px). Asserts the
+`.react-flow` pane height > 200px and the node's center sits inside the pane rect
+(not just `toBeVisible`, which the original bug passed), then resizes
+375 → 1280 → 375 and re-asserts the node stays framed.
+
+Verification: `npx tsc --noEmit` clean; Playwright 2/2 (happy-path + graph-mobile)
+green; vitest 42/42 green. Visually confirmed via screenshots at 375px: both
+nodes (`main.py` critical/red, `utils.py`) framed with the edge, controls, and
+legend, before and after the resize round-trip.
+
 ### 2026-06-03 (Phase 5 Step 7 — Polish + E2E) — Phase 5 COMPLETE
 Polish pass over the four surfaces (landing, progress, chat, graph). No data-layer
 or feature changes; only existing Indigo Slate tokens, no new hex.

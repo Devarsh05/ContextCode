@@ -137,6 +137,7 @@ frontend/
     [x] Step 5 — Chat tab (composer, bubbles, expandable citations)
     [x] Step 6 — Dependency graph tab (React Flow + dagre, danger zones)
     [x] Step 7 — Polish: loading/empty/error states, responsive/a11y, Playwright E2E
+    [x] QA — Mobile graph fix: zero-height collapse (flex-1→lg:flex-1) + fitView-on-resize
 [ ] Phase 6 — Deploy
 
 ## Session Log
