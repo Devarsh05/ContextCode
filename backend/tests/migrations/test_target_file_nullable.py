@@ -70,7 +70,8 @@ def migrated_db(monkeypatch):
     finally:
         admin.close()
 
-    # env.py reads DATABASE_URL (async driver) and runs the migrations online.
+    # env.py reads DATABASE_URL and normalizes it to a sync driver to run the
+    # migrations online; pass the async form to prove that normalization holds.
     async_url = base.set(drivername="postgresql+asyncpg", database=tmp_name)
     monkeypatch.setenv(
         "DATABASE_URL", async_url.render_as_string(hide_password=False)
