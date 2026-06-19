@@ -1,0 +1,5 @@
+# Local-dev requirements: base + the local MiniLM embedding stack.
+# The production image installs requirements.txt only (no torch); local dev adds
+# sentence-transformers (which pulls torch) so EMBEDDING_PROVIDER=local works.
+-r requirements.txt
+sentence-transformers

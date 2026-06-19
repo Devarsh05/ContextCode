@@ -1,13 +1,15 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import ChatRequest, ChatResponse, CitationResponse
+from app.config import get_settings
 from app.models.database import get_db
 from app.models.repository import Repository
 from app.rag.pipeline import RAGPipeline
+from app.rate_limit import limiter
 
 router = APIRouter(tags=["chat"])
 
@@ -15,7 +17,9 @@ _pipeline = RAGPipeline()
 
 
 @router.post("/chat", response_model=ChatResponse)
+@limiter.limit(get_settings().rate_limit_chat)
 async def chat(
+    request: Request,
     body: ChatRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:

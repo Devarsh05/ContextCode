@@ -2,6 +2,84 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-18 (Phase 6 Step 0 — Deploy-prep code changes)
+Pre-flight changes to make the backend deployable on Railway + Vercel. No infra
+work: nothing deployed, no Railway/Vercel touched, no remote alembic. Branch
+`phase-6/deploy-prep`.
+
+New `app/config.py` — a single pydantic-settings `Settings` schema centralizing
+every deploy env var (DATABASE_URL, REDIS_URL, CHROMA_HOST/PORT/TOKEN,
+CHROMA_PERSIST_PATH, EMBEDDING_PROVIDER, OPENAI_API_KEY, CORS_ALLOW_ORIGINS, the
+rate-limit values). Every field has a default so importing it never explodes in a
+partial env. No `env_file` — it reads `os.environ`, composing with the existing
+`load_dotenv()` calls. `get_settings()` returns a **fresh instance per call**
+(deliberately not cached) so the env-patch test style in the suite is honored. A
+`model_validator` defaults `rate_limit_storage_uri` to `redis_url`; a `cors_origins`
+property comma-splits/trims the origins.
+
+Chroma (`app/services/vector_store.py`) — added `create_chroma_client(persist_path)`:
+returns `chromadb.HttpClient(host, port, headers=Bearer CHROMA_TOKEN)` when
+CHROMA_HOST is set (so the API and Celery worker share one Chroma), else the
+embedded `PersistentClient` as before. `VectorStore._get_client()` now routes
+through it; the `persist_path` constructor arg and `./chroma_data` default are kept
+so the existing store tests (no CHROMA_HOST → PersistentClient) pass untouched.
+`docker-compose.yml` gained a pinned `chromadb/chroma:1.5.9` service (matches the
+1.5.9 client) with a named `chroma_data:/data` volume, port 8000, and a
+`/api/v2/heartbeat` healthcheck. `.env.example` sets `CHROMA_HOST=localhost` so
+local dev uses HttpClient too, matching prod.
+
+Embeddings (`app/services/embeddings.py`) — `LocalEmbedder.dimension` now comes from
+the loaded model (`get_sentence_embedding_dimension()`), removing the hardcoded
+`_DIMENSION = 384`; dimension is sourced from the active provider. The
+sentence-transformers import was already lazy (inside `_get_model()`); kept that way
+so the torch-free prod image imports cleanly. `get_embedder()` reads
+`get_settings().embedding_provider`. Requirements split: base `requirements.txt`
+drops `sentence-transformers` (and thus torch) and adds `slowapi` +
+`pydantic-settings`; new `requirements-local.txt` is `-r requirements.txt` plus
+`sentence-transformers` for local MiniLM.
+
+CORS (`app/main.py`) — `allow_origins` now from `get_settings().cors_origins` and
+**`allow_credentials=False`** (no auth → credentialed wildcard CORS removed). The
+`allow_methods/allow_headers=["*"]` stay (safe without credentials).
+
+Rate limiting — new `app/rate_limit.py`: slowapi `Limiter` keyed by client IP,
+`storage_uri` defaulting to the Redis broker URL, `swallow_errors=True` so a Redis
+blip fails OPEN (serves the request) rather than 500-ing — the right call for an
+auth-less portfolio deploy. `main.py` wires `app.state.limiter` + the
+`RateLimitExceeded` handler. POST `/repos/index` (`rate_limit_index`, 10/hour) and
+POST `/chat` (`rate_limit_chat`, 30/minute) carry `@limiter.limit(...)` + a
+`request: Request` param.
+
+Dockerfile — installs `git` (shallow clone), base `requirements.txt` only (no
+torch), and `CMD ["sh","-c","alembic upgrade head && uvicorn app.main:app --host
+0.0.0.0 --port ${PORT:-8000}"]` (migrate then boot on Railway's $PORT). No
+`--pool=solo` baked anywhere — the worker on Railway/Linux uses default prefork;
+solo stays only in CLAUDE.md's local-dev docs.
+
+Tests: `tests/services/test_chroma_factory.py` (HttpClient vs PersistentClient
+selection + bearer header, mocked — no live server); `test_embeddings.py` extended
+with provider-dimension assertions (local 384 from model, openai 1536) and a
+subprocess-isolated lazy-import guard that blocks `torch`/`sentence_transformers`,
+sets EMBEDDING_PROVIDER=openai, imports `app.main`, and asserts `get_embedder()`
+returns `OpenAIEmbedder`; `test_cors.py` rewritten — credentials now asserted OFF,
+plus origin parsing from CORS_ALLOW_ORIGINS; new `test_rate_limit.py` builds a
+throwaway app via the real `build_limiter("memory://")` + handler and asserts a 429
+past a 2/minute limit. `conftest.py` forces `RATE_LIMIT_STORAGE_URI=memory://`
+(Redis-free, before any app import) and an autouse fixture `limiter.reset()`s
+between tests so per-route limits don't accumulate across the session.
+
+Verification: `pip install -r requirements-local.txt` OK; **pytest 232 passed**
+(ruff/mypy not used by this project); `docker build -t contextcode-api .` succeeds
+installing base reqs only — package list shows no torch/sentence-transformers,
+clean (no CMD warning); `docker compose up -d` then
+`Invoke-WebRequest http://localhost:8000/api/v2/heartbeat` → **200**
+`{"nanosecond heartbeat":...}`. Static checks: `\b384\b` over `app/**` → no match;
+`["*"]` matches only `allow_methods`/`allow_headers` (not `allow_origins`).
+
+Next: Phase 6 deploy proper — Railway services (API + worker + Postgres + Redis +
+Chroma) and Vercel frontend, with `EMBEDDING_PROVIDER=openai`,
+`CORS_ALLOW_ORIGINS` = the Vercel domain, and the rate-limit envs set.
+
 ### 2026-06-17 (Phase 5 QA — Mobile graph zero-height collapse)
 Final QA fix for the dependency-graph tab at 375px. Reported symptom: graph
 canvas a black empty box with no nodes, controls/legend rendering fine above and

@@ -1,6 +1,8 @@
 import os
 from abc import ABC, abstractmethod
 
+from app.config import get_settings
+
 
 class Embedder(ABC):
     @abstractmethod
@@ -21,7 +23,6 @@ class Embedder(ABC):
 
 
 class LocalEmbedder(Embedder):
-    _DIMENSION = 384
     _MODEL_NAME = "all-MiniLM-L6-v2"
 
     def __init__(self, batch_size: int = 32) -> None:
@@ -48,7 +49,8 @@ class LocalEmbedder(Embedder):
 
     @property
     def dimension(self) -> int:
-        return self._DIMENSION
+        # Comes from the active model, never hardcoded.
+        return self._get_model().get_sentence_embedding_dimension()
 
     @property
     def model_name(self) -> str:
@@ -97,7 +99,7 @@ class OpenAIEmbedder(Embedder):
 
 
 def get_embedder() -> Embedder:
-    provider = os.environ.get("EMBEDDING_PROVIDER", "local")
+    provider = get_settings().embedding_provider
     if provider == "openai":
         return OpenAIEmbedder()
     return LocalEmbedder()

@@ -1,5 +1,3 @@
-import os
-
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,27 +5,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import router as chat_router
 from app.api.graph import router as graph_router
 from app.api.repos import router as repos_router
+from app.config import get_settings
+from app.rate_limit import RateLimitExceeded, limiter, rate_limit_handler
 
 load_dotenv()
 
-# Comma-separated list of allowed origins. Frontend (Vercel) and backend
-# (Railway) live on different domains, so requests are cross-origin in prod.
-# Defaults to the local Next.js dev server.
-_CORS_ALLOW_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("CORS_ALLOW_ORIGINS", "http://localhost:3000").split(",")
-    if origin.strip()
-]
-
+# Comma-separated allowed origins (CORS_ALLOW_ORIGINS). Frontend (Vercel) and
+# backend (Railway) live on different domains, so requests are cross-origin in
+# prod. Defaults to the local Next.js dev server. Credentials are OFF — there is
+# no auth, and "*"-style credentialed CORS is a footgun.
 app = FastAPI(title="ContextCode API")
+
+# Per-IP rate limiting on the token-spending endpoints (see app/rate_limit.py).
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
 # Applies to every route, including the GET /repos/{id}/status SSE stream —
 # CORSMiddleware wraps the whole ASGI app, so streamed responses get the
 # Access-Control-Allow-Origin header too.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_CORS_ALLOW_ORIGINS,
-    allow_credentials=True,
+    allow_origins=get_settings().cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

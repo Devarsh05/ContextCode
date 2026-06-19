@@ -2,16 +2,18 @@ import asyncio
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.api.schemas import IndexRequest, IndexResponse, RepoResponse
+from app.config import get_settings
 from app.models.code_chunk import CodeChunk
 from app.models.database import get_db
 from app.models.indexing_job import IndexingJob
 from app.models.repository import Repository
+from app.rate_limit import limiter
 from app.services.ingestion import IngestionService
 from app.services.vector_store import get_vector_store
 from app.workers.tasks import index_repository
@@ -20,7 +22,9 @@ router = APIRouter(prefix="/repos", tags=["repos"])
 
 
 @router.post("/index", response_model=IndexResponse)
+@limiter.limit(get_settings().rate_limit_index)
 async def start_indexing(
+    request: Request,
     body: IndexRequest,
     db: AsyncSession = Depends(get_db),
 ) -> IndexResponse:

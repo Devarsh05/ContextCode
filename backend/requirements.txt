@@ -13,12 +13,13 @@ tree-sitter-python
 tree-sitter-javascript
 tree-sitter-typescript
 python-dotenv
+pydantic-settings
+slowapi
 httpx
 gitpython
 pytest
 pytest-asyncio
 pytest-cov
-sentence-transformers
 networkx
 celery[redis]
 psycopg2-binary

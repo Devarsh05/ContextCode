@@ -13,20 +13,46 @@ from typing import Any
 
 import chromadb
 from chromadb import Collection
+from chromadb.api import ClientAPI
+
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 _store: "VectorStore | None" = None
 
 
+def create_chroma_client(persist_path: str = "./chroma_data") -> ClientAPI:
+    """Return the Chroma client for the active environment.
+
+    When CHROMA_HOST is set, returns an ``HttpClient`` so the API and Celery
+    worker share one Chroma server (with optional bearer-token auth from
+    CHROMA_TOKEN). Otherwise falls back to an embedded ``PersistentClient`` on
+    local disk — the original single-process local-dev behavior.
+    """
+    settings = get_settings()
+    if settings.chroma_host:
+        headers = (
+            {"Authorization": f"Bearer {settings.chroma_token}"}
+            if settings.chroma_token
+            else None
+        )
+        return chromadb.HttpClient(
+            host=settings.chroma_host,
+            port=settings.chroma_port,
+            headers=headers,
+        )
+    return chromadb.PersistentClient(path=persist_path)
+
+
 class VectorStore:
     def __init__(self, persist_path: str = "./chroma_data") -> None:
         self._persist_path = persist_path
-        self._client: chromadb.PersistentClient | None = None
+        self._client: ClientAPI | None = None
 
-    def _get_client(self) -> chromadb.PersistentClient:
+    def _get_client(self) -> ClientAPI:
         if self._client is None:
-            self._client = chromadb.PersistentClient(path=self._persist_path)
+            self._client = create_chroma_client(self._persist_path)
         return self._client
 
     def get_or_create_collection(self, repo_id: int) -> Collection:

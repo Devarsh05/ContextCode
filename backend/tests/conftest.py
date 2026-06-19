@@ -1,3 +1,9 @@
+import os
+
+# Keep the rate limiter Redis-free and deterministic in the test suite. Set
+# before any app module (which builds the limiter at import) is imported.
+os.environ["RATE_LIMIT_STORAGE_URI"] = "memory://"
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -7,6 +13,17 @@ from sqlalchemy.pool import StaticPool
 from app.models.database import Base
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Clear limiter state between tests so per-route limits don't accumulate
+    across the session (memory storage is process-global)."""
+    from app.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest_asyncio.fixture

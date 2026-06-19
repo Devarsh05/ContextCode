@@ -1,4 +1,7 @@
 import os
+import subprocess
+import sys
+import textwrap
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -57,6 +60,65 @@ class TestGetEmbedder:
         with patch.dict(os.environ, {"EMBEDDING_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test"}):
             embedder = get_embedder()
         assert isinstance(embedder, OpenAIEmbedder)
+
+
+# ---------------------------------------------------------------------------
+# Dimension comes from the active provider — never hardcoded at the call site.
+# ---------------------------------------------------------------------------
+
+class TestEmbedderDimension:
+    def test_local_dimension_reported_by_model(self):
+        # all-MiniLM-L6-v2 → 384, read from the loaded model (not a constant).
+        assert LocalEmbedder().dimension == 384
+
+    def test_openai_dimension(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
+            # text-embedding-3-small → 1536, no API call needed.
+            assert OpenAIEmbedder().dimension == 1536
+
+
+# ---------------------------------------------------------------------------
+# Lazy-import guard: the production image installs base requirements WITHOUT
+# torch/sentence-transformers. The app must import and the OpenAI embedder must
+# work even when those packages are absent. Run in a subprocess so the blocked
+# modules don't pollute this test session.
+# ---------------------------------------------------------------------------
+
+class TestLazyImportGuard:
+    def test_app_imports_with_provider_openai_and_torch_absent(self):
+        script = textwrap.dedent(
+            """
+            import sys
+            # Setting a module to None makes `import <name>` raise ImportError,
+            # simulating the torch-free production image.
+            sys.modules["torch"] = None
+            sys.modules["sentence_transformers"] = None
+
+            import app.main  # full import graph must not pull in torch
+            from app.services.embeddings import get_embedder, OpenAIEmbedder
+
+            embedder = get_embedder()
+            assert isinstance(embedder, OpenAIEmbedder), type(embedder)
+            assert sys.modules.get("sentence_transformers") is None
+            print("OK")
+            """
+        )
+        env = {
+            **os.environ,
+            "EMBEDDING_PROVIDER": "openai",
+            "OPENAI_API_KEY": "sk-test",
+            "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
+            "REDIS_URL": "redis://localhost:6379/0",
+        }
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+        assert "OK" in result.stdout
 
 
 # ---------------------------------------------------------------------------
