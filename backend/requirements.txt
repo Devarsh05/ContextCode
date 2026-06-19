@@ -8,6 +8,7 @@ chromadb
 langchain
 langchain-openai
 openai
+tiktoken
 tree-sitter
 tree-sitter-python
 tree-sitter-javascript

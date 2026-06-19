@@ -1,7 +1,10 @@
+import logging
 import os
 from abc import ABC, abstractmethod
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class Embedder(ABC):
@@ -60,6 +63,9 @@ class LocalEmbedder(Embedder):
 class OpenAIEmbedder(Embedder):
     _DIMENSION = 1536
     _MODEL_NAME = "text-embedding-3-small"
+    # text-embedding-3-small caps inputs at 8192 tokens; stay under it with headroom.
+    _MAX_INPUT_TOKENS = 8000
+    _ENCODING_NAME = "cl100k_base"  # encoding used by text-embedding-3-small
 
     def __init__(self, batch_size: int = 100) -> None:
         api_key = os.environ.get("OPENAI_API_KEY")
@@ -70,6 +76,7 @@ class OpenAIEmbedder(Embedder):
         self._api_key = api_key
         self.batch_size = batch_size
         self._client = None  # lazy: loaded on first embed call
+        self._encoding = None  # lazy: loaded on first embed call
 
     def _get_client(self):
         if self._client is None:
@@ -77,11 +84,34 @@ class OpenAIEmbedder(Embedder):
             self._client = OpenAI(api_key=self._api_key)
         return self._client
 
+    def _get_encoding(self):
+        if self._encoding is None:
+            import tiktoken
+            self._encoding = tiktoken.get_encoding(self._ENCODING_NAME)
+        return self._encoding
+
+    def _cap_text(self, text: str, index: int) -> str:
+        """Truncate a single input to the token cap so it can't fail the batch."""
+        enc = self._get_encoding()
+        tokens = enc.encode(text)
+        if len(tokens) <= self._MAX_INPUT_TOKENS:
+            return text
+        logger.warning(
+            "Truncating chunk %d from %d to %d tokens before OpenAI embedding",
+            index,
+            len(tokens),
+            self._MAX_INPUT_TOKENS,
+        )
+        return enc.decode(tokens[: self._MAX_INPUT_TOKENS])
+
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         client = self._get_client()
+        # Cap each input up front (global index keeps warnings pointing at the real
+        # chunk) so no single oversized item can reject the whole batch.
+        capped = [self._cap_text(text, i) for i, text in enumerate(texts)]
         results: list[list[float]] = []
-        for i in range(0, len(texts), self.batch_size):
-            batch = texts[i : i + self.batch_size]
+        for i in range(0, len(capped), self.batch_size):
+            batch = capped[i : i + self.batch_size]
             response = client.embeddings.create(model=self._MODEL_NAME, input=batch)
             results.extend(item.embedding for item in response.data)
         return results

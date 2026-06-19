@@ -153,3 +153,29 @@ class TestOpenAIEmbedder:
         results = embedder.embed_texts(["a", "b", "c"])
         assert len(results) == 3
         assert mock_client.embeddings.create.call_count == 2
+
+    def test_cap_text_truncates_over_cap_input(self):
+        import tiktoken
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
+            embedder = OpenAIEmbedder()
+
+        enc = tiktoken.get_encoding("cl100k_base")
+        # " word" is a single token; repeat well past the cap.
+        text = " word" * (OpenAIEmbedder._MAX_INPUT_TOKENS + 500)
+        assert len(enc.encode(text)) > OpenAIEmbedder._MAX_INPUT_TOKENS
+
+        capped = embedder._cap_text(text, 68)
+        assert len(enc.encode(capped)) <= OpenAIEmbedder._MAX_INPUT_TOKENS
+
+    def test_cap_text_leaves_normal_input_unchanged(self):
+        import tiktoken
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
+            embedder = OpenAIEmbedder()
+
+        enc = tiktoken.get_encoding("cl100k_base")
+        text = "def add(a, b):\n    return a + b\n"
+        assert len(enc.encode(text)) < OpenAIEmbedder._MAX_INPUT_TOKENS
+
+        assert embedder._cap_text(text, 0) == text
