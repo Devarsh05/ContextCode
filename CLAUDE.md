@@ -9,6 +9,9 @@ file dependencies with danger zone analysis.
 - Backend: FastAPI, Python 3.11, LangChain, Tree-sitter, ChromaDB, PostgreSQL
 - Frontend: Next.js 14 (App Router), TypeScript, Tailwind, React Flow
 - Deploy: Vercel (frontend), Railway (backend)
+- Deployed topology: Railway runs 5 services (FastAPI API, Celery worker,
+  ChromaDB+volume, Postgres, Redis) over private networking; Vercel hosts the
+  Next.js frontend; production uses OpenAI embeddings (text-embedding-3-small).
 
 ## Rules — follow these every session, no exceptions
 - Never push to main directly
@@ -138,7 +141,13 @@ frontend/
     [x] Step 6 — Dependency graph tab (React Flow + dagre, danger zones)
     [x] Step 7 — Polish: loading/empty/error states, responsive/a11y, Playwright E2E
     [x] QA — Mobile graph fix: zero-height collapse (flex-1→lg:flex-1) + fitView-on-resize
-[ ] Phase 6 — Deploy
+[x] Phase 6 — Deploy
+    [x] Step 0 — Deploy-prep code changes (env-selectable Chroma client, OpenAI/MiniLM provider switch, CORS hardening, slowapi rate limiting, torch-free prod requirements, Dockerfile migrate-then-boot, docker-compose Chroma)
+    [x] Step 1 — Railway provisioning (Postgres, Redis, ChromaDB service + volume)
+    [x] Step 2 — API service deploy
+    [x] Step 3 — Celery worker deploy
+    [x] Step 4 — Frontend deploy (Vercel)
+    [x] Step 5 — CORS finalize + end-to-end smoke test
 
 ## Session Log
 Full session history lives in docs/SESSION_LOG.md. Read it if you need

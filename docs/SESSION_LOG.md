@@ -2,6 +2,44 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-19 (Phase 6 — Deployed; Phase complete)
+ContextCode is live: Railway runs the 5 backend services (FastAPI API, Celery
+worker, ChromaDB+volume, Postgres, Redis) over private networking; Vercel hosts the
+Next.js frontend. Production uses OpenAI embeddings (text-embedding-3-small) via
+`EMBEDDING_PROVIDER=openai`. End-to-end smoke test passed: index → SSE progress →
+chat with citations → dependency graph. Gotchas hit along the way, recorded so a
+future reader doesn't repeat them:
+
+- **Deploy-branch mismatch.** Railway and Vercel were building a branch that didn't
+  contain the Phase 6 commits, so fixes looked ignored — the deploy kept exhibiting
+  already-fixed bugs. Fix: point every deploy target at the working branch, then
+  consolidate back to main. Lesson: verify the deployed commit SHA matches the SHA
+  you pushed before debugging anything else.
+
+- **Async DB URL scheme.** Railway injects `DATABASE_URL` as `postgresql://`
+  (sync/psycopg2), but `create_async_engine` needs `postgresql+asyncpg://` — the app
+  failed to boot until the scheme was normalized in `app/models/database.py`. Lesson:
+  run `import app.main` with prod-shaped env vars locally before pushing.
+
+- **Chroma topology.** Moved from the embedded `PersistentClient` to a standalone
+  Railway Chroma service. Both the API and the worker must set
+  `CHROMA_HOST`/`CHROMA_PORT`/`CHROMA_TOKEN` so they use `HttpClient` against the one
+  shared instance; if `CHROMA_HOST` is empty they silently fall back to a local
+  `PersistentClient` and never see each other's data. Two more traps: the client reads
+  `CHROMA_TOKEN` (not the server's `CHROMA_SERVER_AUTHN_CREDENTIALS`), and
+  `RAILWAY_PRIVATE_DOMAIN` isn't in the variable-reference picker, so the host has to
+  be entered as a literal `<service>.railway.internal` value.
+
+- **Oversized chunks.** Chunks over text-embedding-3-small's 8192-token limit 400'd
+  the entire embedding batch (one bad chunk failed all of it), so indexing died on
+  larger repos. Fixed by capping each input to 8000 tokens via tiktoken in
+  `OpenAIEmbedder` before the API call.
+
+- **force_reindex.** Re-submitting an existing repo URL returns the existing record
+  without re-running the pipeline; pass `force_reindex=true` to actually re-index.
+
+- **CORS finalized** to the Vercel origin with credentials disabled.
+
 ### 2026-06-18 (Phase 6 Step 1 — Railway infra provisioned)
 Provisioned the backing services on Railway: Postgres, Redis, and Chroma. Chroma
 runs from the `ACT900/chromadb-railway` template, serving the v2 API — heartbeat at
