@@ -2,6 +2,19 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-18 (Phase 6 Step 1 — Railway infra provisioned)
+Provisioned the backing services on Railway: Postgres, Redis, and Chroma. Chroma
+runs from the `ACT900/chromadb-railway` template, serving the v2 API — heartbeat at
+`/api/v2/heartbeat` returns 200, and the chromadb client/server are compatible
+without pinning a version. App services (API + worker) not yet wired in this step.
+
+Carry-forward for the service wiring step:
+- Worker service must OVERRIDE its start command to
+  `celery -A app.workers.celery_app worker --loglevel=info` — default prefork pool
+  on Railway/Linux, NOT `--pool=solo` (that's Windows-local-only).
+- API service keeps the Dockerfile CMD (runs `alembic upgrade head` then boots
+  uvicorn on `$PORT`) — do not override it.
+
 ### 2026-06-18 (Phase 6 Step 0 — Deploy-prep code changes)
 Pre-flight changes to make the backend deployable on Railway + Vercel. No infra
 work: nothing deployed, no Railway/Vercel touched, no remote alembic. Branch
