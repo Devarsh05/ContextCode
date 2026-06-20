@@ -1,9 +1,22 @@
+import os
 import uuid
 from dataclasses import dataclass
+from unittest.mock import patch
 
 import pytest
 
 from app.services.vector_store import VectorStore
+
+
+@pytest.fixture(autouse=True)
+def _force_local_chroma():
+    """Force the embedded PersistentClient path on tmp_path regardless of the
+    developer's local .env. create_chroma_client() reads CHROMA_HOST live via the
+    uncached get_settings(); the test process inherits .env through
+    app.models.database's import-time load_dotenv(). Setting CHROMA_HOST="" (falsy)
+    keeps every test on an isolated on-disk client instead of a shared HttpClient."""
+    with patch.dict(os.environ, {"CHROMA_HOST": ""}):
+        yield
 
 
 @dataclass
