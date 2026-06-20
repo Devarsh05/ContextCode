@@ -2,6 +2,53 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-19 (Cost-gate verification — local-env breakage fixed)
+The cost-control gate feature (access code + global daily Redis quota) was already
+implemented correctly. Everything below is pre-existing local-env breakage found
+while verifying it against the real stack — no gate code was wrong.
+
+- **load_dotenv() ordering.** `app/main.py` imported `app.api.chat` (→
+  `app.models.database`, which reads `os.environ["DATABASE_URL"]` at module level)
+  BEFORE calling `load_dotenv()`. A long-lived `uvicorn --reload` masked this —
+  `--reload` hot-swaps code but never re-runs module-level env loading; only a cold
+  process restart exposed it. Fixed by moving
+  `from dotenv import load_dotenv; load_dotenv()` to the very top of `main.py`,
+  above any local `app.*` import.
+
+- **Duplicate .env.** A mid-session `Add-Content .env ...` run from `/backend`
+  instead of repo root created a second, divergent `backend/.env` (only
+  CHROMA_HOST/CHROMA_PORT) that shadowed the root `.env` for any process started
+  from `/backend` — i.e. every backend process here. Several root-`.env` edits had
+  no effect because `load_dotenv()` was resolving the `/backend` copy. Fixed by
+  consolidating to one root `.env` and deleting the stray `backend/.env`.
+
+- **Chroma/uvicorn port collision.** `docker-compose.yml` mapped Chroma to host
+  port 8000, identical to uvicorn's local default, so `localhost:8000` landed
+  non-deterministically on whichever process held the port (confirmed via
+  `/openapi.json` intermittently returning Chroma's own schema). Fixed by remapping
+  Chroma to host `8001` (`"8001:8000"`, container-internal port unchanged) and
+  setting `CHROMA_HOST=localhost`/`CHROMA_PORT=8001` in `.env`. Closes out the
+  port-collision diagnosis left in-progress at the end of the prior session.
+
+- **Missing DATABASE_URL.** Never set in local `.env`. Added
+  `postgresql+asyncpg://contextcode:changeme@localhost:5432/contextcode`, matching
+  POSTGRES_USER/PASSWORD/DB and the async-driver scheme already required on Railway.
+
+- **Not fixed (cosmetic).** Chroma container still reports `unhealthy` in
+  `docker compose ps` despite serving correctly (direct `/api/v2/heartbeat` → 200) —
+  the compose healthcheck command itself is broken, likely `curl` missing from the
+  slim image. Low priority; revisit when `docker-compose.yml` is next touched.
+
+- **Verified against the real local stack** (not just the test suite): no-code →
+  401 with zero quota consumed, wrong code → 401, correct code under quota → 200
+  with job created, forced at-ceiling → 429 with the capacity message; direct Redis
+  inspection confirmed a rejected request does not inflate the counter
+  (DECR-on-reject proven, not just asserted).
+
+- **Pending.** Same verification against deployed Railway (ACCESS_CODE not yet set
+  on the API service), and a full `pytest backend/tests -q` rerun to confirm
+  today's `main.py`/`.env` changes broke nothing.
+
 ### 2026-06-19 (Phase 6 — Deployed; Phase complete)
 ContextCode is live: Railway runs the 5 backend services (FastAPI API, Celery
 worker, ChromaDB+volume, Postgres, Redis) over private networking; Vercel hosts the

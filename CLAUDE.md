@@ -73,6 +73,13 @@ Run these in order each session (Docker containers don't auto-start after reboot
    uvicorn app.main:app --reload
    ```
 
+### Known gotchas (local env)
+- `load_dotenv()` must run before any `app.*` import in `main.py` — some models
+  read `os.environ` at import time (e.g. `app/models/database.py`).
+- `.env` is loaded relative to the process's working directory at startup —
+  verify it's read from repo root, not `/backend` (especially after running any
+  env-editing command from inside `/backend`).
+
 ## What we are NOT building
 - Autonomous coding agents
 - Code generation or copilot features
