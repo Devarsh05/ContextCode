@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import ChatRequest, ChatResponse, CitationResponse
+from app.api.cost_gate import require_chat_quota
+from app.api.schemas import (
+    ChatRequest,
+    ChatResponse,
+    CitationResponse,
+    ErrorResponse,
+)
 from app.config import get_settings
 from app.models.database import get_db
 from app.models.repository import Repository
@@ -16,12 +22,17 @@ router = APIRouter(tags=["chat"])
 _pipeline = RAGPipeline()
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post(
+    "/chat",
+    response_model=ChatResponse,
+    responses={401: {"model": ErrorResponse}, 429: {"model": ErrorResponse}},
+)
 @limiter.limit(get_settings().rate_limit_chat)
 async def chat(
     request: Request,
     body: ChatRequest,
     db: AsyncSession = Depends(get_db),
+    _quota: None = Depends(require_chat_quota),
 ) -> ChatResponse:
     try:
         repo_uuid = UUID(body.repo_id)

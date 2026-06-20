@@ -7,7 +7,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.schemas import IndexRequest, IndexResponse, RepoResponse
+from app.api.cost_gate import require_index_quota
+from app.api.schemas import (
+    ErrorResponse,
+    IndexRequest,
+    IndexResponse,
+    RepoResponse,
+)
 from app.config import get_settings
 from app.models.code_chunk import CodeChunk
 from app.models.database import get_db
@@ -21,12 +27,17 @@ from app.workers.tasks import index_repository
 router = APIRouter(prefix="/repos", tags=["repos"])
 
 
-@router.post("/index", response_model=IndexResponse)
+@router.post(
+    "/index",
+    response_model=IndexResponse,
+    responses={401: {"model": ErrorResponse}, 429: {"model": ErrorResponse}},
+)
 @limiter.limit(get_settings().rate_limit_index)
 async def start_indexing(
     request: Request,
     body: IndexRequest,
     db: AsyncSession = Depends(get_db),
+    _quota: None = Depends(require_index_quota),
 ) -> IndexResponse:
     try:
         IngestionService.validate_github_url(body.repo_url)

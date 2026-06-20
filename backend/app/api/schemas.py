@@ -3,6 +3,15 @@ from uuid import UUID
 from pydantic import BaseModel, field_validator
 
 
+class ErrorResponse(BaseModel):
+    """Standard error body (matches FastAPI's HTTPException shape).
+
+    Used to document the 401 / 429 responses of the cost-control gate.
+    """
+
+    detail: str
+
+
 class IndexRequest(BaseModel):
     repo_url: str
     force_reindex: bool = False

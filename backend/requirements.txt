@@ -21,6 +21,7 @@ gitpython
 pytest
 pytest-asyncio
 pytest-cov
+fakeredis
 networkx
 celery[redis]
 psycopg2-binary

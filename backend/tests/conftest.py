@@ -52,6 +52,7 @@ async def db_session(db_engine):
 
 @pytest_asyncio.fixture
 async def async_client(db_session):
+    from app.api.cost_gate import require_chat_quota, require_index_quota
     from app.main import app
     from app.models.database import get_db
 
@@ -59,6 +60,12 @@ async def async_client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
+    # Disable the cost-control gate by default so endpoint tests exercise route
+    # logic, not the gate. Overriding the two quota dependencies also bypasses
+    # their require_access_code sub-dependency. The dedicated gate tests
+    # (test_cost_gate.py) pop these overrides to run the real gate.
+    app.dependency_overrides[require_index_quota] = lambda: None
+    app.dependency_overrides[require_chat_quota] = lambda: None
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",

@@ -4,6 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { MessagesSquare } from "lucide-react";
 
 import { useChat } from "@/hooks/use-chat";
+import { useAccessCode } from "@/hooks/use-access-code";
+import {
+  AT_CAPACITY_MESSAGE,
+  getStoredAccessCode,
+  isAtCapacity,
+  isUnauthorized,
+} from "@/lib/access-code";
+import { AccessCodeModal } from "@/components/access-code-modal";
 import { ChatComposer } from "@/components/repo/chat/chat-composer";
 import { ChatMessageItem } from "@/components/repo/chat/chat-message";
 import { ChatThinking } from "@/components/repo/chat/chat-thinking";
@@ -23,8 +31,14 @@ const SUGGESTIONS = [
 export function ChatPanel({ repoId }: { repoId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const chat = useChat();
+  const { setCode, clearCode } = useAccessCode();
   const idRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const pendingAskRef = useRef<{ question: string; withUserBubble: boolean } | null>(
+    null,
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -40,6 +54,16 @@ export function ChatPanel({ repoId }: { repoId: string }) {
    * the new assistant reply.
    */
   function ask(question: string, { withUserBubble = true } = {}) {
+    // Gate: prompt for the access code before sending if none is stored yet.
+    // The user bubble is deferred until a code exists so a cancelled prompt
+    // leaves no orphaned message.
+    if (!getStoredAccessCode()) {
+      pendingAskRef.current = { question, withUserBubble };
+      setModalError(null);
+      setModalOpen(true);
+      return;
+    }
+
     if (withUserBubble) {
       setMessages((prev) => [
         ...prev,
@@ -60,19 +84,32 @@ export function ChatPanel({ repoId }: { repoId: string }) {
               citations: data.citations,
             },
           ]),
-        onError: (error) =>
+        onError: (error) => {
+          // Wrong/stale code: clear it and reprompt (the user bubble already
+          // exists, so the resubmit must not add another).
+          if (isUnauthorized(error)) {
+            clearCode();
+            pendingAskRef.current = { question, withUserBubble: false };
+            setModalError("Invalid access code. Please try again.");
+            setModalOpen(true);
+            return;
+          }
+          // Daily pool spent: surface the capacity message, no reprompt.
+          const answer = isAtCapacity(error)
+            ? AT_CAPACITY_MESSAGE
+            : error.message || "The request failed. Please try again.";
           setMessages((prev) => [
             ...prev,
             {
               id: nextId(),
               role: "assistant",
-              answer:
-                error.message || "The request failed. Please try again.",
+              answer,
               citations: [],
               isError: true,
               question,
             },
-          ]),
+          ]);
+        },
       },
     );
   }
@@ -90,6 +127,7 @@ export function ChatPanel({ repoId }: { repoId: string }) {
   const isEmpty = messages.length === 0 && !chat.isPending;
 
   return (
+    <>
     <div className="flex h-[calc(100vh-15rem)] min-h-[420px] flex-col gap-4">
       <div className="flex-1 overflow-y-auto">
         {isEmpty ? (
@@ -137,5 +175,19 @@ export function ChatPanel({ repoId }: { repoId: string }) {
 
       <ChatComposer onSubmit={handleSubmit} pending={chat.isPending} />
     </div>
+
+    <AccessCodeModal
+      open={modalOpen}
+      error={modalError}
+      onClose={() => setModalOpen(false)}
+      onSubmit={(submitted) => {
+        setCode(submitted);
+        setModalOpen(false);
+        const pending = pendingAskRef.current;
+        pendingAskRef.current = null;
+        if (pending) ask(pending.question, { withUserBubble: pending.withUserBubble });
+      }}
+    />
+    </>
   );
 }

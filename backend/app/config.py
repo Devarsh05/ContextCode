@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     # Defaults to redis_url (resolved below) so the limiter reuses the broker.
     rate_limit_storage_uri: str = ""
 
+    # ── Cost-control gate ─────────────────────────────────────────────────────
+    # Shared secret required (X-Access-Code header) on the two token-spending
+    # endpoints. Empty ⇒ the gate rejects every request with 401.
+    access_code: str = ""
+    # Global daily ceilings (keyed by UTC date in Redis, auto-reset). Tunable on
+    # Railway without a redeploy.
+    quota_index_daily: int = 3
+    quota_chat_daily: int = 50
+    # Per-counter TTL (~25h) so the daily key self-expires even if traffic stops.
+    quota_ttl_seconds: int = 90000
+
     @model_validator(mode="after")
     def _default_storage_to_redis(self) -> "Settings":
         if not self.rate_limit_storage_uri:
