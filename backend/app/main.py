@@ -1,4 +1,6 @@
 from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,7 +10,7 @@ from app.api.repos import router as repos_router
 from app.config import get_settings
 from app.rate_limit import RateLimitExceeded, limiter, rate_limit_handler
 
-load_dotenv()
+
 
 # Comma-separated allowed origins (CORS_ALLOW_ORIGINS). Frontend (Vercel) and
 # backend (Railway) live on different domains, so requests are cross-origin in
