@@ -48,7 +48,9 @@ class Settings(BaseSettings):
     # Global daily ceilings (keyed by UTC date in Redis, auto-reset). Tunable on
     # Railway without a redeploy.
     quota_index_daily: int = 3
-    quota_chat_daily: int = 50
+    quota_chat_daily: int = 100
+    # Per-demo-session cap on chat messages (counter tracks the session lifetime).
+    quota_chat_per_session: int = 20
     # Per-counter TTL (~25h) so the daily key self-expires even if traffic stops.
     quota_ttl_seconds: int = 90000
 

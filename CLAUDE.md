@@ -55,12 +55,16 @@ file dependencies with danger zone analysis.
   default; pass `force_reindex=true` to drop chunks and re-run.
 - Parsing and embedding are CPU-bound — they run inside the Celery task,
   never in an async endpoint.
-- Cost-control gate on token-spending endpoints: POST /repos/index and POST
-  /chat require X-Access-Code (matches ACCESS_CODE env var, fails closed if
-  unset) AND are capped by a global daily Redis quota (QUOTA_INDEX_DAILY=3,
-  QUOTA_CHAT_DAILY=50 by default, env-tunable on Railway without redeploy).
-  Read-only endpoints (status/graph/repo) stay ungated. Gate logic lives in
-  app/api/cost_gate.py.
+- Cost-control gate (logic lives in app/api/cost_gate.py; read-only
+  status/graph/repo endpoints stay ungated). Quota counters are date-stamped in
+  Redis (auto-reset): quota:{counter}:global:{YYYY-MM-DD}.
+  - POST /repos/index: requires X-Access-Code (matches ACCESS_CODE env var, fails
+    closed if unset) AND a global daily quota (QUOTA_INDEX_DAILY=3, env-tunable).
+  - POST /chat: PUBLIC (no access code). Requires a valid demo session via the
+    X-Demo-Session header (minted by POST /demo/session, stored as
+    demo:session:{id}), is restricted to demo repos only (is_demo), and is capped
+    by a per-session counter (QUOTA_CHAT_PER_SESSION=20) plus the global daily
+    counter (QUOTA_CHAT_DAILY=100). All env-tunable on Railway without redeploy.
 
 ## Local Development — Startup
 Run these in order each session (Docker containers don't auto-start after reboot):

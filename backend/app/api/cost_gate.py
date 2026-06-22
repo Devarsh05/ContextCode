@@ -15,11 +15,22 @@ and Celery already use. ``redis`` ships transitively via ``celery[redis]``.
 """
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Header, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.schemas import ChatRequest
 from app.config import get_settings
+from app.models.database import get_db
+from app.models.repository import Repository
+
+
+def _utc_day() -> str:
+    """Current UTC date as ``YYYY-MM-DD`` — the date stamp on daily quota keys."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 _redis_client: aioredis.Redis | None = None
 
@@ -71,8 +82,7 @@ def daily_quota(counter: str, ceiling_field: str):
     ) -> None:
         settings = get_settings()
         ceiling = getattr(settings, ceiling_field)
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        key = f"quota:{counter}:{day}"
+        key = f"quota:{counter}:global:{_utc_day()}"
 
         count = await redis.incr(key)
         if count == 1:
@@ -88,4 +98,75 @@ def daily_quota(counter: str, ceiling_field: str):
 
 
 require_index_quota = daily_quota("index", "quota_index_daily")
-require_chat_quota = daily_quota("chat", "quota_chat_daily")
+
+
+async def require_chat_access(
+    body: ChatRequest,
+    x_demo_session: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+) -> None:
+    """Public chat gate: demo session + demo-repo-only + per-session/global quota.
+
+    Replaces the access-code gate on /chat (indexing keeps the access code). The
+    steps run in a fixed order and never consume quota on a later failure:
+
+      a. Validate the X-Demo-Session header against ``demo:session:{id}`` in Redis
+         (minted by POST /demo/session). Missing/expired → 401.
+      b. The target repo must exist and be a demo repo. Missing → 404; non-demo →
+         403 (public chat is demo repos only).
+      c. INCR the per-session counter; over the per-session cap → DECR, 429. Its
+         TTL tracks the session's remaining lifetime.
+      d. INCR the dated global counter; over the daily cap → DECR global AND DECR
+         the per-session counter from (c), 429.
+
+    INCR-then-check is atomic, so concurrent requests can never overshoot a cap.
+    """
+    settings = get_settings()
+
+    # (a) Demo session — Redis TTL makes expiry automatic (expired key reads None).
+    session_key = f"demo:session:{x_demo_session}"
+    if not x_demo_session or await redis.get(session_key) is None:
+        raise HTTPException(status_code=401, detail="Missing or invalid demo session")
+
+    # (b) Demo-repo-only.
+    try:
+        repo_uuid = UUID(body.repo_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    result = await db.execute(select(Repository).where(Repository.id == repo_uuid))
+    repo = result.scalar_one_or_none()
+    if repo is None:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    if not repo.is_demo:
+        raise HTTPException(
+            status_code=403, detail="Chat is available for demo repositories only"
+        )
+
+    # (c) Per-session cap. TTL tracks the session so the counter dies with it.
+    session_counter = f"quota:chat:session:{x_demo_session}"
+    session_count = await redis.incr(session_counter)
+    if session_count == 1:
+        session_ttl = await redis.ttl(session_key)
+        if session_ttl and session_ttl > 0:
+            await redis.expire(session_counter, session_ttl)
+    if session_count > settings.quota_chat_per_session:
+        await redis.decr(session_counter)
+        raise HTTPException(
+            status_code=429,
+            detail="You've reached the demo message limit for this session.",
+        )
+
+    # (d) Global daily cap. Roll back (c) too if we trip the ceiling here.
+    global_counter = f"quota:chat:global:{_utc_day()}"
+    global_count = await redis.incr(global_counter)
+    if global_count == 1:
+        await redis.expire(global_counter, settings.quota_ttl_seconds)
+    if global_count > settings.quota_chat_daily:
+        await redis.decr(global_counter)
+        await redis.decr(session_counter)
+        raise HTTPException(
+            status_code=429,
+            detail="Demo is at capacity for today. Please try again tomorrow.",
+        )
