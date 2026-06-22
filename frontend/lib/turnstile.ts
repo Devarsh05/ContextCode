@@ -26,7 +26,6 @@ interface TurnstileRenderOptions {
 }
 
 interface TurnstileApi {
-  ready: (cb: () => void) => void;
   render: (
     container: HTMLElement | string,
     options: TurnstileRenderOptions,
@@ -79,61 +78,59 @@ export async function executeTurnstile(siteKey: string): Promise<string> {
   }
 
   return new Promise<string>((resolve, reject) => {
-    turnstile.ready(() => {
-      const container = document.createElement("div");
-      // Centered + high z-index so an interactive challenge (rare; never with
-      // the test key) is visible and usable. Hidden otherwise.
-      container.style.position = "fixed";
-      container.style.top = "50%";
-      container.style.left = "50%";
-      container.style.transform = "translate(-50%, -50%)";
-      container.style.zIndex = "100";
-      document.body.appendChild(container);
+    const container = document.createElement("div");
+    // Centered + high z-index so an interactive challenge (rare; never with
+    // the test key) is visible and usable. Hidden otherwise.
+    container.style.position = "fixed";
+    container.style.top = "50%";
+    container.style.left = "50%";
+    container.style.transform = "translate(-50%, -50%)";
+    container.style.zIndex = "100";
+    document.body.appendChild(container);
 
-      let widgetId: string | undefined;
-      let settled = false;
+    let widgetId: string | undefined;
+    let settled = false;
 
-      const cleanup = () => {
-        clearTimeout(timer);
-        try {
-          if (widgetId) turnstile.remove(widgetId);
-        } catch {
-          // widget may already be gone — ignore
-        }
-        container.remove();
-      };
-
-      const succeed = (token: string) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(token);
-      };
-
-      const fail = (message: string) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(new Error(message));
-      };
-
-      const timer = setTimeout(
-        () => fail("Turnstile challenge timed out"),
-        CHALLENGE_TIMEOUT_MS,
-      );
-
+    const cleanup = () => {
+      clearTimeout(timer);
       try {
-        widgetId = turnstile.render(container, {
-          sitekey: siteKey,
-          appearance: "interaction-only",
-          callback: (token) => succeed(token),
-          "error-callback": () => fail("Turnstile challenge failed"),
-          "expired-callback": () => fail("Turnstile token expired"),
-          "timeout-callback": () => fail("Turnstile challenge timed out"),
-        });
-      } catch (err) {
-        fail(err instanceof Error ? err.message : "Turnstile render failed");
+        if (widgetId) turnstile.remove(widgetId);
+      } catch {
+        // widget may already be gone — ignore
       }
-    });
+      container.remove();
+    };
+
+    const succeed = (token: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(token);
+    };
+
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
+
+    const timer = setTimeout(
+      () => fail("Turnstile challenge timed out"),
+      CHALLENGE_TIMEOUT_MS,
+    );
+
+    try {
+      widgetId = turnstile.render(container, {
+        sitekey: siteKey,
+        appearance: "interaction-only",
+        callback: (token) => succeed(token),
+        "error-callback": () => fail("Turnstile challenge failed"),
+        "expired-callback": () => fail("Turnstile token expired"),
+        "timeout-callback": () => fail("Turnstile challenge timed out"),
+      });
+    } catch (err) {
+      fail(err instanceof Error ? err.message : "Turnstile render failed");
+    }
   });
 }
