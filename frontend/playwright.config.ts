@@ -33,5 +33,8 @@ export default defineConfig({
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // Cloudflare's always-pass Turnstile TEST key, so the demo-session mint
+    // succeeds deterministically (the script itself is stubbed via page.route).
+    env: { NEXT_PUBLIC_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" },
   },
 });

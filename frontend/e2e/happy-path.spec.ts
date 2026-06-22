@@ -86,6 +86,12 @@ async function mockBackend(page: Page) {
     await route.fulfill({ json: repoResponse });
   });
 
+  // The landing page fetches demo repos; an empty list keeps the demos section
+  // in its (stable) empty state so this test stays focused on the BYO flow.
+  await page.route("**/repos/demos", async (route) => {
+    await route.fulfill({ json: [] });
+  });
+
   await page.route("**/repos/index", async (route) => {
     await route.fulfill({ json: indexResponse });
   });
@@ -101,6 +107,29 @@ async function mockBackend(page: Page) {
     await route.fulfill({ json: graphResponse });
   });
 
+  // Chat now requires a demo session: stub the Turnstile script (auto-passes)
+  // and the session-mint endpoint so the gate clears deterministically offline.
+  await page.route("**/turnstile/v0/api.js", async (route) => {
+    await route.fulfill({
+      contentType: "application/javascript",
+      body: `
+        window.turnstile = {
+          ready: function (cb) { cb(); },
+          render: function (container, opts) {
+            setTimeout(function () { opts.callback("test-token"); }, 0);
+            return "test-widget";
+          },
+          remove: function () {},
+          reset: function () {},
+        };
+      `,
+    });
+  });
+
+  await page.route("**/demo/session", async (route) => {
+    await route.fulfill({ json: { session_id: "demo-sess-1", expires_in: 3600 } });
+  });
+
   await page.route("**/chat", async (route) => {
     await route.fulfill({ json: chatResponse });
   });
@@ -113,11 +142,17 @@ test("index a repo, chat with citations, and view the graph", async ({
 
   await page.goto("/");
 
-  // Landing → submit a valid GitHub URL.
+  // Landing → submit a valid GitHub URL via the secondary BYO-repo form.
   await page
     .getByLabel("Public GitHub repository URL")
     .fill("https://github.com/acme/widget");
   await page.getByRole("button", { name: "Analyze" }).click();
+
+  // BYO indexing is gated by the access-code modal — enter a code to proceed.
+  await page
+    .getByRole("textbox", { name: "Access code" })
+    .fill("test-access-code");
+  await page.getByRole("button", { name: "Continue" }).click();
 
   // Progress view streams while the SSE response is pending.
   await expect(page).toHaveURL(new RegExp(`/repo/${REPO_ID}$`));

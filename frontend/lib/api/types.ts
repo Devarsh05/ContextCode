@@ -9,6 +9,9 @@ import type { components } from "@/types/api";
 export type IndexRequest = components["schemas"]["IndexRequest"];
 export type IndexResponse = components["schemas"]["IndexResponse"];
 export type RepoResponse = components["schemas"]["RepoResponse"];
+export type DemoRepoResponse = components["schemas"]["DemoRepoResponse"];
+export type DemoSessionRequest = components["schemas"]["DemoSessionRequest"];
+export type DemoSessionResponse = components["schemas"]["DemoSessionResponse"];
 
 export type ChatRequest = components["schemas"]["ChatRequest"];
 export type ChatResponse = components["schemas"]["ChatResponse"];

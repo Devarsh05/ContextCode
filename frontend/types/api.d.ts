@@ -21,6 +21,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repos/demos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Demo Repos
+         * @description List the curated demo repositories (read-only, ungated).
+         *
+         *     Declared before ``/{repo_id}`` so the literal path is matched first.
+         */
+        get: operations["list_demo_repos_repos_demos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{repo_id}": {
         parameters: {
             query?: never;
@@ -89,6 +111,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/demo/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Demo Session */
+        post: operations["create_demo_session_demo_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -138,6 +177,44 @@ export interface components {
             chunk_type: string;
             /** Snippet */
             snippet: string;
+        };
+        /** DemoRepoResponse */
+        DemoRepoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+            /** File Count */
+            file_count?: number | null;
+            /** Status */
+            status: string;
+        };
+        /** DemoSessionRequest */
+        DemoSessionRequest: {
+            /** Token */
+            token: string;
+        };
+        /** DemoSessionResponse */
+        DemoSessionResponse: {
+            /** Session Id */
+            session_id: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
+         * ErrorResponse
+         * @description Standard error body (matches FastAPI's HTTPException shape).
+         *
+         *     Used to document the 401 / 429 responses of the cost-control gate.
+         */
+        ErrorResponse: {
+            /** Detail */
+            detail: string;
         };
         /** GraphEdgeResponse */
         GraphEdgeResponse: {
@@ -243,7 +320,9 @@ export interface operations {
     start_indexing_repos_index_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-access-code"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -262,6 +341,15 @@ export interface operations {
                     "application/json": components["schemas"]["IndexResponse"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -269,6 +357,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_demo_repos_repos_demos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoRepoResponse"][];
                 };
             };
         };
@@ -338,7 +455,9 @@ export interface operations {
     chat_chat_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-demo-session"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -357,6 +476,24 @@ export interface operations {
                     "application/json": components["schemas"]["ChatResponse"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -364,6 +501,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -388,6 +534,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_demo_session_demo_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoSessionResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */

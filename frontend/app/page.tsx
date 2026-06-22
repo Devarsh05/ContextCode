@@ -1,5 +1,6 @@
 import { GitBranch, MessagesSquare, Network } from "lucide-react";
 
+import { DemoRepoCards } from "@/components/demo-repo-cards";
 import { RepoUrlForm } from "@/components/repo-url-form";
 
 const benefits = [
@@ -34,16 +35,32 @@ export default function Home() {
       </h1>
 
       <p className="mt-5 max-w-xl text-pretty text-base text-muted-foreground sm:text-lg">
-        Chat with any GitHub repo and see its danger zones — paste a public URL
-        and ContextCode indexes it, answers questions with citations, and maps
-        the dependency graph.
+        Chat with a codebase and see its danger zones — pick a demo repo to dive
+        in instantly, with answers grounded in citations and a live dependency
+        graph.
       </p>
 
-      <RepoUrlForm />
+      {/* Primary entry point: curated, pre-indexed demo repos. */}
+      <DemoRepoCards />
 
-      <p className="mt-3 text-xs text-muted-foreground">
-        Public repos · Python, JavaScript &amp; TypeScript
-      </p>
+      {/* Secondary, advanced path: bring your own public GitHub repo. */}
+      <section className="mt-16 flex w-full max-w-md flex-col items-center">
+        <div className="flex w-full items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or bring your own repo
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <p className="mt-4 text-sm text-muted-foreground">
+          Index any public GitHub repo. Requires an access code.
+        </p>
+
+        <RepoUrlForm />
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          Public repos · Python, JavaScript &amp; TypeScript
+        </p>
+      </section>
 
       <div className="mt-20 grid w-full max-w-4xl gap-6 text-left sm:grid-cols-3">
         {benefits.map(({ icon: Icon, title, body }) => (

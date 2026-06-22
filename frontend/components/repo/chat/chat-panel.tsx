@@ -4,18 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { MessagesSquare } from "lucide-react";
 
 import { useChat } from "@/hooks/use-chat";
-import { useAccessCode } from "@/hooks/use-access-code";
+import { useDemoSession } from "@/hooks/use-demo-session";
 import {
-  AT_CAPACITY_MESSAGE,
-  getStoredAccessCode,
-  isAtCapacity,
-  isUnauthorized,
-} from "@/lib/access-code";
-import { AccessCodeModal } from "@/components/access-code-modal";
+  GLOBAL_LIMIT_MESSAGE,
+  SESSION_LIMIT_MESSAGE,
+  isAtGlobalLimit,
+  isAtSessionLimit,
+  isExpiredSession,
+} from "@/lib/demo-session";
 import { ChatComposer } from "@/components/repo/chat/chat-composer";
 import { ChatMessageItem } from "@/components/repo/chat/chat-message";
 import { ChatThinking } from "@/components/repo/chat/chat-thinking";
 import type { ChatMessage } from "@/components/repo/chat/types";
+import type { CitationResponse } from "@/lib/api/types";
 
 const SUGGESTIONS = [
   "What does this project do?",
@@ -23,29 +24,89 @@ const SUGGESTIONS = [
   "Where does request handling start?",
 ];
 
+const VERIFY_FAILED_MESSAGE =
+  "We couldn't verify you're human. Please try again.";
+
 /**
- * Chat tab for an indexed repo. Messages live in local state only — there is no
- * persistence (multi-user/auth is out of scope). Each ask is a blocking POST
- * /chat via useChat; while pending we show an animated thinking bubble.
+ * Chat tab for an indexed demo repo. Messages live in local state only — there
+ * is no persistence (multi-user/auth is out of scope). Chat is public but gated
+ * by a demo session: the first ask mints one via a Turnstile challenge, then
+ * each ask is a blocking POST /chat carrying the `X-Demo-Session` header. While
+ * verifying or awaiting the model we show an animated thinking bubble.
  */
 export function ChatPanel({ repoId }: { repoId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const chat = useChat();
-  const { setCode, clearCode } = useAccessCode();
+  const { ensureSession, refreshSession, clearSession } = useDemoSession();
+  // True while minting a demo session (running Turnstile) before the request.
+  const [verifying, setVerifying] = useState(false);
   const idRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
-  const pendingAskRef = useRef<{ question: string; withUserBubble: boolean } | null>(
-    null,
-  );
+
+  const busy = chat.isPending || verifying;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [messages.length, chat.isPending]);
+  }, [messages.length, busy]);
 
   function nextId() {
     return String((idRef.current += 1));
+  }
+
+  function appendAssistant(
+    answer: string,
+    extra: {
+      citations?: CitationResponse[];
+      isError?: boolean;
+      question?: string;
+    } = {},
+  ) {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        role: "assistant",
+        answer,
+        citations: extra.citations ?? [],
+        isError: extra.isError,
+        question: extra.question,
+      },
+    ]);
+  }
+
+  /** Fire the POST /chat mutation. `canRemint` allows one silent re-mint on 401. */
+  function send(question: string, { canRemint }: { canRemint: boolean }) {
+    chat.mutate(
+      { repo_id: repoId, question },
+      {
+        onSuccess: (data) =>
+          appendAssistant(data.answer, { citations: data.citations }),
+        onError: async (error) => {
+          // Expired/invalid session: silently re-mint and retry exactly once.
+          if (isExpiredSession(error) && canRemint) {
+            try {
+              clearSession();
+              await refreshSession();
+              send(question, { canRemint: false });
+              return;
+            } catch {
+              appendAssistant(VERIFY_FAILED_MESSAGE, {
+                isError: true,
+                question,
+              });
+              return;
+            }
+          }
+
+          const answer = isAtSessionLimit(error)
+            ? SESSION_LIMIT_MESSAGE
+            : isAtGlobalLimit(error)
+              ? GLOBAL_LIMIT_MESSAGE
+              : error.message || "The request failed. Please try again.";
+          appendAssistant(answer, { isError: true, question });
+        },
+      },
+    );
   }
 
   /**
@@ -53,17 +114,7 @@ export function ChatPanel({ repoId }: { repoId: string }) {
    * failed turn — the user prompt is already in the thread, so we only append
    * the new assistant reply.
    */
-  function ask(question: string, { withUserBubble = true } = {}) {
-    // Gate: prompt for the access code before sending if none is stored yet.
-    // The user bubble is deferred until a code exists so a cancelled prompt
-    // leaves no orphaned message.
-    if (!getStoredAccessCode()) {
-      pendingAskRef.current = { question, withUserBubble };
-      setModalError(null);
-      setModalOpen(true);
-      return;
-    }
-
+  async function ask(question: string, { withUserBubble = true } = {}) {
     if (withUserBubble) {
       setMessages((prev) => [
         ...prev,
@@ -71,63 +122,33 @@ export function ChatPanel({ repoId }: { repoId: string }) {
       ]);
     }
 
-    chat.mutate(
-      { repo_id: repoId, question },
-      {
-        onSuccess: (data) =>
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: nextId(),
-              role: "assistant",
-              answer: data.answer,
-              citations: data.citations,
-            },
-          ]),
-        onError: (error) => {
-          // Wrong/stale code: clear it and reprompt (the user bubble already
-          // exists, so the resubmit must not add another).
-          if (isUnauthorized(error)) {
-            clearCode();
-            pendingAskRef.current = { question, withUserBubble: false };
-            setModalError("Invalid access code. Please try again.");
-            setModalOpen(true);
-            return;
-          }
-          // Daily pool spent: surface the capacity message, no reprompt.
-          const answer = isAtCapacity(error)
-            ? AT_CAPACITY_MESSAGE
-            : error.message || "The request failed. Please try again.";
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: nextId(),
-              role: "assistant",
-              answer,
-              citations: [],
-              isError: true,
-              question,
-            },
-          ]);
-        },
-      },
-    );
+    // Ensure a demo session before spending an LLM call. Minting runs Turnstile.
+    setVerifying(true);
+    try {
+      await ensureSession();
+    } catch {
+      appendAssistant(VERIFY_FAILED_MESSAGE, { isError: true, question });
+      return;
+    } finally {
+      setVerifying(false);
+    }
+
+    send(question, { canRemint: true });
   }
 
   function handleSubmit(question: string) {
-    ask(question);
+    void ask(question);
   }
 
   /** Drop the failed error turn and re-ask its question (no new user bubble). */
   function handleRetry(errorId: string, question: string) {
     setMessages((prev) => prev.filter((message) => message.id !== errorId));
-    ask(question, { withUserBubble: false });
+    void ask(question, { withUserBubble: false });
   }
 
-  const isEmpty = messages.length === 0 && !chat.isPending;
+  const isEmpty = messages.length === 0 && !busy;
 
   return (
-    <>
     <div className="flex h-[calc(100vh-15rem)] min-h-[420px] flex-col gap-4">
       <div className="flex-1 overflow-y-auto">
         {isEmpty ? (
@@ -167,27 +188,13 @@ export function ChatPanel({ repoId }: { repoId: string }) {
                 }
               />
             ))}
-            {chat.isPending && <ChatThinking />}
+            {busy && <ChatThinking />}
             <div ref={bottomRef} />
           </div>
         )}
       </div>
 
-      <ChatComposer onSubmit={handleSubmit} pending={chat.isPending} />
+      <ChatComposer onSubmit={handleSubmit} pending={busy} />
     </div>
-
-    <AccessCodeModal
-      open={modalOpen}
-      error={modalError}
-      onClose={() => setModalOpen(false)}
-      onSubmit={(submitted) => {
-        setCode(submitted);
-        setModalOpen(false);
-        const pending = pendingAskRef.current;
-        pendingAskRef.current = null;
-        if (pending) ask(pending.question, { withUserBubble: pending.withUserBubble });
-      }}
-    />
-    </>
   );
 }
