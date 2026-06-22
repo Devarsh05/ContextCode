@@ -9,6 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.api.cost_gate import require_index_quota
 from app.api.schemas import (
+    DemoRepoResponse,
     ErrorResponse,
     IndexRequest,
     IndexResponse,
@@ -84,6 +85,32 @@ async def start_indexing(
     index_repository.delay(body.repo_url, str(job.id), str(repo.id))
 
     return IndexResponse(repo_id=repo.id, job_id=job.id, status="queued")
+
+
+@router.get("/demos", response_model=list[DemoRepoResponse])
+async def list_demo_repos(
+    db: AsyncSession = Depends(get_db),
+) -> list[DemoRepoResponse]:
+    """List the curated demo repositories (read-only, ungated).
+
+    Declared before ``/{repo_id}`` so the literal path is matched first.
+    """
+    result = await db.execute(
+        select(Repository)
+        .where(Repository.is_demo.is_(True))
+        .order_by(Repository.name)
+    )
+    repos = result.scalars().all()
+    return [
+        DemoRepoResponse(
+            id=repo.id,
+            name=repo.name,
+            url=repo.url,
+            file_count=repo.file_count,
+            status=repo.status,
+        )
+        for repo in repos
+    ]
 
 
 @router.get("/{repo_id}", response_model=RepoResponse)

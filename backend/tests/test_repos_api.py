@@ -167,6 +167,61 @@ async def test_get_repo_unknown_returns_404(async_client):
     assert response.json()["detail"] == "Repository not found"
 
 
+# ── GET /repos/demos ─────────────────────────────────────────────────────────
+
+async def test_demos_returns_only_demo_repos(async_client, db_session):
+    demo_a = Repository(
+        url="https://github.com/owner/demo-a",
+        name="demo-a",
+        status="completed",
+        file_count=10,
+        is_demo=True,
+    )
+    demo_b = Repository(
+        url="https://github.com/owner/demo-b",
+        name="demo-b",
+        status="completed",
+        is_demo=True,
+    )
+    plain = Repository(
+        url="https://github.com/owner/plain",
+        name="plain",
+        status="completed",
+        is_demo=False,
+    )
+    db_session.add_all([demo_a, demo_b, plain])
+    await db_session.commit()
+
+    response = await async_client.get("/repos/demos")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert {r["name"] for r in data} == {"demo-a", "demo-b"}
+    # Fields match the DemoRepoResponse contract (id, name, url, file_count,
+    # status) and exclude the non-demo repo.
+    by_name = {r["name"]: r for r in data}
+    assert by_name["demo-a"]["id"] == str(demo_a.id)
+    assert by_name["demo-a"]["url"] == "https://github.com/owner/demo-a"
+    assert by_name["demo-a"]["file_count"] == 10
+    assert by_name["demo-a"]["status"] == "completed"
+    assert by_name["demo-b"]["file_count"] is None
+
+
+async def test_demos_empty_when_no_demos(async_client, db_session):
+    repo = Repository(
+        url="https://github.com/owner/not-a-demo",
+        name="not-a-demo",
+        status="completed",
+    )
+    db_session.add(repo)
+    await db_session.commit()
+
+    response = await async_client.get("/repos/demos")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 # ── GET /repos/{repo_id}/status (SSE) ────────────────────────────────────────
 
 async def test_status_sse_unknown_repo_returns_404(async_client):

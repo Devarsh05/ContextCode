@@ -31,6 +31,14 @@ class RepoResponse(BaseModel):
     file_count: int | None = None
 
 
+class DemoRepoResponse(BaseModel):
+    id: UUID
+    name: str
+    url: str
+    file_count: int | None = None
+    status: str
+
+
 class CitationResponse(BaseModel):
     file_path: str
     function_name: str
