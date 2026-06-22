@@ -19,4 +19,4 @@ COPY . .
 # Exec form wrapping `sh -c` so ${PORT} is expanded and && works, without the
 # JSONArgsRecommended warning. The Celery worker runs as a separate service with
 # the DEFAULT prefork pool (no --pool=solo — that's Windows-local-only).
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "alembic upgrade head && (python -m app.services.demo_seed || true) && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
