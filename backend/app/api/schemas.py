@@ -39,6 +39,15 @@ class DemoRepoResponse(BaseModel):
     status: str
 
 
+class DemoSessionRequest(BaseModel):
+    token: str
+
+
+class DemoSessionResponse(BaseModel):
+    session_id: str
+    expires_in: int
+
+
 class CitationResponse(BaseModel):
     file_path: str
     function_name: str

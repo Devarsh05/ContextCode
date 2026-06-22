@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     # Per-counter TTL (~25h) so the daily key self-expires even if traffic stops.
     quota_ttl_seconds: int = 90000
 
+    # ── Demo session (Cloudflare Turnstile) ───────────────────────────────────
+    # Server-side Turnstile secret. Empty ⇒ POST /demo/session rejects every
+    # request (fail closed, same posture as access_code).
+    turnstile_secret_key: str = ""
+    # Lifetime of a minted demo session id in Redis.
+    demo_session_ttl_seconds: int = 3600
+
     @model_validator(mode="after")
     def _default_storage_to_redis(self) -> "Settings":
         if not self.rate_limit_storage_uri:
