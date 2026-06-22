@@ -2,6 +2,100 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-22 (Phase 7 — Demo-first access mode; Phases A–D complete)
+Rewired the access model so the public landing experience runs entirely on
+pre-indexed demo repos with no access code required. Arbitrary repo indexing
+stays gated behind the existing X-Access-Code header.
+
+**Phase A — is_demo model + seed + GET /repos/demos**
+
+`is_demo: bool` column added to `repositories` (SQLAlchemy `Boolean`, NOT NULL,
+`server_default=false()`). Alembic migration adds it with a default. `GET
+/repos/demos` is an ungated read-only endpoint returning all repos where
+`is_demo=True` and `status='completed'`, ordered by name.
+
+`app/services/demo_seed.py` flags a curated list of URLs
+(`DEMO_REPO_URLS`: encode/databases, psf/requests, colinhacks/zod) as demos. It
+is **idempotent** — re-running is a no-op, already-flagged rows increment an
+`already` counter and are skipped. Rows not yet indexed are logged as warnings
+and skipped; they are never fabricated. The seeder only operates on rows that
+already exist via the normal pipeline.
+
+The Dockerfile CMD now runs the seeder non-fatally before boot:
+`alembic upgrade head && (python -m app.services.demo_seed || true) && uvicorn ...`
+The `|| true` means a missing DB row (demo repo not indexed yet) or a transient
+error can never block the API service from starting.
+
+**Phase B — Turnstile-minted demo session**
+
+`POST /demo/session` in `app/api/demo_session.py` accepts a Cloudflare Turnstile
+challenge token and, after server-side verification against
+`https://challenges.cloudflare.com/turnstile/v0/siteverify`, mints an opaque
+32-byte URL-safe session id stored in Redis (`demo:session:{id}`, TTL driven by
+`DEMO_SESSION_TTL_SECONDS`). Fails closed: an unset `TURNSTILE_SECRET_KEY`
+rejects every request (same pattern as the access-code gate).
+
+Client IP is resolved once at mint time: the first hop in `X-Forwarded-For` wins
+(Railway sits behind a proxy), with a fallback to the socket peer. The IP is
+stored as the Redis value (for potential abuse auditing) but not re-checked on
+subsequent chat requests — the session token is the rate-limit subject, not the
+raw IP.
+
+Turnstile key strategy: Cloudflare's public test site key (`1x00000000000000000000AA`) +
+dummy token work in local/E2E environments without hitting the real Cloudflare
+API. In production, real site/secret keys are set as env vars; the prod secret
+correctly rejects the dummy token, so test tokens never pass through a prod
+deployment. The widget's `data-sitekey` is `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+(build-time on Vercel — must be set before the Vercel build runs).
+
+**Phase C — Chat gate rewire**
+
+`require_chat_access` in `app/api/cost_gate.py` replaces the old access-code
+dependency on `POST /chat`. It enforces four checks in strict order, consuming
+quota only on the success path of each prior check:
+
+1. `X-Demo-Session` header present and the key `demo:session:{id}` exists in
+   Redis (expired key reads `None` — TTL-based expiry is automatic, no cron).
+2. Target `repo_id` exists and `is_demo=True`; non-demo repos get 403.
+3. INCR `quota:chat:session:{session_id}`; over `QUOTA_CHAT_PER_SESSION` → DECR,
+   429. Session counter TTL mirrors the session key's remaining lifetime (read via
+   `TTL` at first increment).
+4. INCR `quota:chat:global:{YYYY-MM-DD}`; over `QUOTA_CHAT_DAILY` → DECR global
+   AND DECR the per-session counter from step 3, 429.
+
+The INCR-then-check pattern is atomic (no race condition). The DECR rollback
+ordering on step-4 rejection matters: global is decremented first, then the
+per-session counter — if a partial rollback occurs, the global cap is the more
+conservative one to leave deflated.
+
+Date-stamped Redis keys (`quota:...:global:{YYYY-MM-DD}`) were chosen over
+rolling TTLs. A rolling TTL would let a burst at 23:59 plus another at 00:01
+double the effective quota; a UTC date key resets hard at midnight regardless of
+when the first request arrived.
+
+**Phase D — Frontend**
+
+Demo cards on the landing page show the curated repos (from `GET /repos/demos`)
+so users can click straight into a pre-indexed experience without pasting a URL.
+The `POST /repos/index` form is still present for arbitrary repos (which will
+bounce with 401 unless an access code is provided).
+
+The Turnstile widget is rendered before the chat composer is shown: on a demo
+repo page, the user solves the challenge once, the frontend calls `POST
+/demo/session`, and the returned `session_id` is stored in component state and
+sent as `X-Demo-Session` on every subsequent `POST /chat`. The widget is not
+shown on the index form (that path requires X-Access-Code, not a session).
+
+`NEXT_PUBLIC_TURNSTILE_SITE_KEY` is the build-time env var on Vercel; the local
+dev value is Cloudflare's public test key. The widget `hostname` in Turnstile
+settings must match the Vercel deployment domain — a mismatch causes the widget
+to render but every verification to fail silently on the server side.
+
+**Pending: Phase E** — prod deploy: set `TURNSTILE_SECRET_KEY` on Railway API
+service, set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` on Vercel (trigger rebuild), run
+`python -m app.services.demo_seed` against prod once the demo repos are indexed,
+verify seed-on-boot path via Dockerfile CMD.
+
 ### 2026-06-19 (Cost-gate verification — local-env breakage fixed)
 The cost-control gate feature (access code + global daily Redis quota) was already
 implemented correctly. Everything below is pre-existing local-env breakage found

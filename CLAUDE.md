@@ -55,16 +55,17 @@ file dependencies with danger zone analysis.
   default; pass `force_reindex=true` to drop chunks and re-run.
 - Parsing and embedding are CPU-bound — they run inside the Celery task,
   never in an async endpoint.
-- Cost-control gate (logic lives in app/api/cost_gate.py; read-only
-  status/graph/repo endpoints stay ungated). Quota counters are date-stamped in
-  Redis (auto-reset): quota:{counter}:global:{YYYY-MM-DD}.
-  - POST /repos/index: requires X-Access-Code (matches ACCESS_CODE env var, fails
-    closed if unset) AND a global daily quota (QUOTA_INDEX_DAILY=3, env-tunable).
-  - POST /chat: PUBLIC (no access code). Requires a valid demo session via the
-    X-Demo-Session header (minted by POST /demo/session, stored as
-    demo:session:{id}), is restricted to demo repos only (is_demo), and is capped
-    by a per-session counter (QUOTA_CHAT_PER_SESSION=20) plus the global daily
-    counter (QUOTA_CHAT_DAILY=100). All env-tunable on Railway without redeploy.
+- Cost-control gate: POST /repos/index requires X-Access-Code (matches
+  ACCESS_CODE env var, fails closed if unset) AND is capped by a daily Redis
+  quota (QUOTA_INDEX_DAILY, default 3). POST /chat is PUBLIC — no access code —
+  but requires a Cloudflare-Turnstile-minted demo session (POST /demo/session,
+  sent as the X-Demo-Session header), is capped per-session by
+  QUOTA_CHAT_PER_SESSION (default 20) and globally by QUOTA_CHAT_DAILY (default
+  100), and on the public path may only target is_demo repos. All daily quota
+  counters use date-stamped Redis keys (quota:...:{YYYY-MM-DD}) with
+  DECR-on-rejection. Read-only endpoints (status/graph/repo/demos) stay
+  ungated. Gate logic lives in app/api/cost_gate.py; session minting in
+  app/api/demo_session.py.
 
 ## Local Development — Startup
 Run these in order each session (Docker containers don't auto-start after reboot):
@@ -102,9 +103,11 @@ Run these in order each session (Docker containers don't auto-start after reboot
 - GET /repos/{id}/status → SSE stream of progress
 - POST /chat → {answer, citations}
 - GET /repos/{id}/graph → dependency graph JSON
+- POST /demo/session → {session_id, expires_in}
+- GET /repos/demos → [demo repos]
 
 ## Data Models
-- Repository: id, url, name, status, created_at, file_count
+- Repository: id, url, name, status, is_demo, created_at, file_count
 - CodeChunk: id, repo_id, file_path, chunk_type, function_name, 
   start_line, end_line, content, language
 - IndexingJob: id, repo_id, status, progress_pct, error_message, 
@@ -165,6 +168,12 @@ frontend/
     [x] Step 3 — Celery worker deploy
     [x] Step 4 — Frontend deploy (Vercel)
     [x] Step 5 — CORS finalize + end-to-end smoke test
+[ ] Phase 7 — Demo-first access mode
+    [x] Phase A — is_demo model + idempotent seed + GET /repos/demos
+    [x] Phase B — Turnstile verify + demo-session minting (POST /demo/session)
+    [x] Phase C — chat gate rewire (public chat, session + dual quota, demo-only)
+    [x] Phase D — frontend (demo cards, Turnstile, demo-session chat gate)
+    [ ] Phase E — prod deploy (env, Turnstile prod keys, seed-on-boot)
 
 ## Session Log
 Full session history lives in docs/SESSION_LOG.md. Read it if you need
