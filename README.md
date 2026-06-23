@@ -4,7 +4,7 @@
 
 [**Live Demo**](https://context-code.vercel.app) — no signup, no API key, three pre-indexed repos ready to chat with right now.
 
-![ContextCode landing page](docs\images\landing-page.png)
+![ContextCode landing page](docs/images/landing-page.png)
 
 
 ---
