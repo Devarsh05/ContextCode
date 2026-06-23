@@ -2,6 +2,87 @@
 
 New entries go here (newest first). Update `## Current Status` in CLAUDE.md when a phase/step completes.
 
+### 2026-06-22 (Phase 7E — prod deploy + post-deploy incidents; Phase 7 complete)
+Phase E closes out the demo-first access mode: Railway env vars set, Vercel rebuilt
+with real Turnstile keys, seed-on-boot path exercised, and two production incidents
+diagnosed and resolved.
+
+**Seed verification**
+
+Railway boot log for the API service showed `flagged=0 already=3 missing=0` on the
+first post-deploy restart — all three demo repos were already indexed and present,
+so the seeder flagged them idempotently and moved on. The `|| true` guard in the
+Dockerfile CMD meant none of that touched the boot sequence. The non-fatal seed-on-
+boot pattern works as designed: seed output goes to the container log, the API
+service starts regardless.
+
+**Incident 1 — stale Vercel deployment promoted to Production**
+
+After pushing the full Phase A–E commit chain, the live site kept showing the pre-
+demo-mode landing page. Root cause: an old deployment (built from an earlier commit,
+before the Phase D frontend demo-card work) had been redeployed at some point, and
+Vercel promoted that redeploy to Production as the most recent successful build —
+even though it was a build of an older commit, not the latest push. Vercel's
+deployment list shows the commit SHA per row; "Redeploy of `<id>`" rows rebuild the
+original deployment's commit, not the current HEAD of the branch, which is easy to
+miss when scanning the list quickly.
+
+Fix: identify the deployment row whose commit SHA matches `git log -1 --format=%H`,
+redeploy that specific deployment, and confirm via its Domains panel that it owns
+the production domain (not just a branch preview alias). Lesson: when a deploy seems
+not to reflect recent commits, check the deployed SHA against `git log -1` before
+debugging anything else, and treat any "Redeploy of" entry as suspect — always
+verify which commit it actually rebuilds.
+
+**Incident 2 — Turnstile failing in prod with generic error, zero Cloudflare requests**
+
+After confirming the correct commit was live, chat still showed "We couldn't verify
+you're human" on every submission. DevTools confirmed: the Turnstile widget div never
+appeared in the DOM and no request fired to `challenges.cloudflare.com`. Root cause
+was a two-layer problem. First, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is baked at build
+time in Next.js; the deployment serving Production had been built before the real
+site key was reliably in place (compounded by the stale-deployment incident above),
+so the live bundle either carried no key or an earlier placeholder. Second, a code
+bug in `frontend/lib/turnstile.ts` wrapped the entire `render()` call inside
+`turnstile.ready()` — a method that does not exist on the Cloudflare Turnstile API.
+Calling it threw `TypeError: turnstile.ready is not a function` synchronously inside
+the `new Promise` executor; the Promise constructor caught the throw and rejected,
+and the rejection was silently swallowed by the catch block in `chat-panel.tsx` that
+maps any `ensureSession()` failure to the generic message. Since the callback inside
+`ready()` never ran, `document.body.appendChild(container)` was never called (no
+widget div), and `turnstile.render()` was never called (no Cloudflare request) —
+matching all three observed DevTools symptoms exactly.
+
+Fix: removed the `turnstile.ready()` wrapper entirely (`d73a135`). `await
+loadTurnstileScript()` already guarantees `window.turnstile` is initialized when
+`script.onload` fires, so `render()` can be called directly in the Promise executor
+with no additional readiness guard. Then forced a no-cache redeploy from the Vercel
+Deployments tab (unchecking "Use existing Build Cache") so the rebuilt bundle picked
+up the current `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Lesson: a deployment can be of the
+correct commit and still ship stale `NEXT_PUBLIC_*` values if those vars changed
+after that build ran — when in doubt, force a full rebuild rather than assuming env
+vars are current.
+
+**Local Turnstile testing pattern that worked**
+
+Index a demo repo locally via the normal access-code flow, then run `python -m
+app.services.demo_seed` to flag it `is_demo=true` against the local DB (the seeder
+only touches existing rows, never fabricates). Flush local Redis first to clear any
+stale quota or session state. Test through the demo-card path using Cloudflare's
+public always-pass test site key (`1x00000000000000000000AA`) and matching always-
+pass secret (`1x0000000000000000000000000000000AA`). The Turnstile widget resolves
+immediately with no human interaction required, the demo session mints, and the full
+chat round-trip runs end-to-end before touching prod keys.
+
+**Production smoke test**
+
+Demo cards render on the landing page, populated from `GET /repos/demos`. Turnstile
+mints a real session (request to `challenges.cloudflare.com` visible in DevTools,
+`POST /demo/session` returns a `session_id`). Chat round-trips with grounded cited
+answers on all three demo repos. Indexing correctly rejects with 401 when no access
+code is supplied and proceeds normally with a valid one. Read-only endpoints
+(`GET /repos/demos`, `GET /repos/{id}/status`) remain ungated. Phase 7 is complete.
+
 ### 2026-06-22 (Phase 7 — Demo-first access mode; Phases A–D complete)
 Rewired the access model so the public landing experience runs entirely on
 pre-indexed demo repos with no access code required. Arbitrary repo indexing

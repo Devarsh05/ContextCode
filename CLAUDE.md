@@ -168,12 +168,12 @@ frontend/
     [x] Step 3 — Celery worker deploy
     [x] Step 4 — Frontend deploy (Vercel)
     [x] Step 5 — CORS finalize + end-to-end smoke test
-[ ] Phase 7 — Demo-first access mode
+[x] Phase 7 — Demo-first access mode
     [x] Phase A — is_demo model + idempotent seed + GET /repos/demos
     [x] Phase B — Turnstile verify + demo-session minting (POST /demo/session)
     [x] Phase C — chat gate rewire (public chat, session + dual quota, demo-only)
     [x] Phase D — frontend (demo cards, Turnstile, demo-session chat gate)
-    [ ] Phase E — prod deploy (env, Turnstile prod keys, seed-on-boot)
+    [x] Phase E — prod deploy (env, Turnstile prod keys, seed-on-boot)
 
 ## Session Log
 Full session history lives in docs/SESSION_LOG.md. Read it if you need
