@@ -4,7 +4,7 @@
 
 [**Live Demo**](https://context-code.vercel.app) — no signup, no API key, three pre-indexed repos ready to chat with right now.
 
-![ContextCode landing page](D:\York University\contextcode\docs\landing page.png)
+![ContextCode landing page](docs\landing page.png)
 *Replace with a real screenshot or GIF of the landing page / chat flow.*
 
 ---
