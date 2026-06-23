@@ -15,8 +15,8 @@
 2. **Chat** — ask questions in plain English. Answers are grounded in retrieved chunks and cite the exact file and line range they came from — no hallucinated file paths.
 3. **Visualize** — an interactive dependency graph (React Flow) shows which files import which, with centrality ranking to surface the highest-risk "hub" files in the codebase.
 
-![Chat with citations](docs\images\chat-citations.png)
-![Dependency graph](docs\images\dependency-graph.png)
+![Chat with citations](docs/images/chat-citations.png)
+![Dependency graph](docs/images/dependency-graph.png)
 
 ---
 
