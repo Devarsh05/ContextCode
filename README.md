@@ -4,8 +4,8 @@
 
 [**Live Demo**](https://context-code.vercel.app) — no signup, no API key, three pre-indexed repos ready to chat with right now.
 
-![ContextCode landing page](docs\landing page.png)
-*Replace with a real screenshot or GIF of the landing page / chat flow.*
+![ContextCode landing page](docs\images\landing-page.png)
+
 
 ---
 
@@ -15,8 +15,8 @@
 2. **Chat** — ask questions in plain English. Answers are grounded in retrieved chunks and cite the exact file and line range they came from — no hallucinated file paths.
 3. **Visualize** — an interactive dependency graph (React Flow) shows which files import which, with centrality ranking to surface the highest-risk "hub" files in the codebase.
 
-![Chat with citations](docs/images/placeholder-chat.png)
-![Dependency graph](docs/images/placeholder-graph.png)
+![Chat with citations](docs\images\chat-citations.png)
+![Dependency graph](docs\images\dependency-graph.png)
 
 ---
 
